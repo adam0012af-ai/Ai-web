@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { UsageChart } from '@/components/dashboard/usage-chart';
-import { aiTools } from '@/data/ai-tools';
+import { aiTools, localizeTool } from '@/data/ai-tools';
 import { getCurrentUser } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { getDashboardText, normalizeLocale } from '@/lib/i18n';
@@ -74,7 +74,8 @@ export default async function Page() {
     }),
   ]);
 
-  const limit = (subscription?.plan.dailyRequests ?? 30) + user.aiDailyBonus;
+  const limit =
+    (subscription?.plan.dailyRequests ?? 30) + user.aiDailyBonus;
 
   const chart = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(weekStart.getTime() + index * 86400000);
@@ -85,7 +86,8 @@ export default async function Page() {
         weekday: 'short',
       }),
       value: weekUsage.filter(
-        (item) => item.createdAt.toISOString().slice(0, 10) === key,
+        (item) =>
+          item.createdAt.toISOString().slice(0, 10) === key,
       ).length,
     };
   });
@@ -95,6 +97,7 @@ export default async function Page() {
   return (
     <>
       <PageHeader
+        eyebrow={ar ? 'مساحة العمل' : 'WORKSPACE'}
         title={`${t.overviewTitle}، ${user.name.split(' ')[0]}`}
         description={t.overviewDescription}
       />
@@ -138,21 +141,29 @@ export default async function Page() {
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {aiTools.slice(0, 6).map((tool) => (
-                <Link
-                  key={tool.slug}
-                  href={
-                    tool.slug === 'chat'
-                      ? '/dashboard/ai/chat'
-                      : `/dashboard/ai/${tool.slug}`
-                  }
-                  className="rounded-2xl border border-[var(--line)] p-4 transition hover:bg-black/[.025] dark:hover:bg-white/[.04]"
-                >
-                  <tool.icon size={18} />
-                  <div className="mt-3 text-sm font-black">{tool.title}</div>
-                  <div className="muted mt-1 text-xs">{tool.category}</div>
-                </Link>
-              ))}
+              {aiTools.slice(0, 6).map((tool) => {
+                const localized = localizeTool(tool, locale);
+
+                return (
+                  <Link
+                    key={tool.slug}
+                    href={
+                      tool.slug === 'chat'
+                        ? '/dashboard/ai/chat'
+                        : `/dashboard/ai/${tool.slug}`
+                    }
+                    className="rounded-2xl border border-[var(--line)] p-4 transition hover:bg-black/[.025] dark:hover:bg-white/[.04]"
+                  >
+                    <tool.icon size={18} />
+                    <div className="mt-3 text-sm font-black">
+                      {localized.displayTitle}
+                    </div>
+                    <div className="muted mt-1 text-xs">
+                      {localized.displayCategory}
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           </Card>
 
@@ -167,7 +178,9 @@ export default async function Page() {
                     key={conversation.id}
                     className="flex items-center justify-between gap-4 py-4 text-sm"
                   >
-                    <b className="min-w-0 truncate">{conversation.title}</b>
+                    <b className="min-w-0 truncate">
+                      {conversation.title}
+                    </b>
                     <span className="muted shrink-0">
                       {conversation.updatedAt.toLocaleDateString(
                         ar ? 'ar-EG' : 'en',
@@ -176,7 +189,9 @@ export default async function Page() {
                   </Link>
                 ))
               ) : (
-                <p className="muted py-5 text-sm">{t.noConversations}</p>
+                <p className="muted py-5 text-sm">
+                  {t.noConversations}
+                </p>
               )}
             </div>
           </Card>
@@ -237,7 +252,11 @@ export default async function Page() {
             <div className="mt-4 space-y-3 text-sm">
               <div className="flex justify-between gap-4">
                 <span className="muted">{t.email}</span>
-                <b>{user.emailVerifiedAt ? t.verified : t.pendingVerification}</b>
+                <b>
+                  {user.emailVerifiedAt
+                    ? t.verified
+                    : t.pendingVerification}
+                </b>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="muted">{t.role}</span>
@@ -261,7 +280,9 @@ export default async function Page() {
               {notifications.length ? (
                 notifications.map((notification) => (
                   <div key={notification.id}>
-                    <div className="text-sm font-bold">{notification.title}</div>
+                    <div className="text-sm font-bold">
+                      {notification.title}
+                    </div>
                     <p className="muted mt-1 text-xs leading-5">
                       {notification.body}
                     </p>

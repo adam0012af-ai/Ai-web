@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 
-import { aiTools } from '@/data/ai-tools';
+import { aiTools, localizeTool } from '@/data/ai-tools';
 import type { AppLocale } from '@/lib/i18n';
 import { getDashboardText } from '@/lib/i18n';
 import { dashboardNav } from './nav-items';
@@ -15,7 +15,11 @@ type Item = {
   type?: string;
 };
 
-export function CommandPalette({ locale }: { locale: AppLocale }) {
+export function CommandPalette({
+  locale,
+}: {
+  locale: AppLocale;
+}) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [remote, setRemote] = useState<Item[]>([]);
@@ -25,13 +29,17 @@ export function CommandPalette({ locale }: { locale: AppLocale }) {
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === 'k'
+      ) {
         event.preventDefault();
         setOpen((current) => !current);
       }
     };
 
     addEventListener('keydown', listener);
+
     return () => removeEventListener('keydown', listener);
   }, []);
 
@@ -42,12 +50,15 @@ export function CommandPalette({ locale }: { locale: AppLocale }) {
     }
 
     const controller = new AbortController();
+
     const timer = setTimeout(
       () =>
         fetch(`/api/search?q=${encodeURIComponent(q)}`, {
           signal: controller.signal,
         })
-          .then((response) => (response.ok ? response.json() : { results: [] }))
+          .then((response) =>
+            response.ok ? response.json() : { results: [] },
+          )
           .then((data) => setRemote(data.results ?? []))
           .catch(() => undefined),
       180,
@@ -67,23 +78,32 @@ export function CommandPalette({ locale }: { locale: AppLocale }) {
           href,
           type: t.page,
         })),
-        ...aiTools.map((tool) => ({
-          label: tool.title,
-          href:
-            tool.slug === 'chat'
-              ? '/dashboard/ai/chat'
-              : `/dashboard/ai/${tool.slug}`,
-          type: t.aiTool,
-        })),
+        ...aiTools.map((tool) => {
+          const localized = localizeTool(tool, locale);
+
+          return {
+            label: localized.displayTitle,
+            href:
+              tool.slug === 'chat'
+                ? '/dashboard/ai/chat'
+                : `/dashboard/ai/${tool.slug}`,
+            type: t.aiTool,
+          };
+        }),
       ]
-        .filter((item) => item.label.toLowerCase().includes(q.toLowerCase()))
+        .filter((item) =>
+          item.label.toLowerCase().includes(q.toLowerCase()),
+        )
         .slice(0, 7),
-    [q, ar, t.page, t.aiTool],
+    [q, ar, locale, t.page, t.aiTool],
   );
 
   const items = [
     ...remote,
-    ...local.filter((localItem) => !remote.some((item) => item.href === localItem.href)),
+    ...local.filter(
+      (localItem) =>
+        !remote.some((item) => item.href === localItem.href),
+    ),
   ].slice(0, 12);
 
   if (!open) {

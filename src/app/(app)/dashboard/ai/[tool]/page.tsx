@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 
-import { toolBySlug, aiTools } from '@/data/ai-tools';
+import { toolBySlug, aiTools, localizeTool } from '@/data/ai-tools';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { ToolRunner } from '@/components/ai/tool-runner';
 import { normalizeLocale } from '@/lib/i18n';
@@ -9,7 +9,9 @@ import { normalizeLocale } from '@/lib/i18n';
 export function generateStaticParams() {
   return aiTools
     .filter((tool) => tool.slug !== 'chat')
-    .map((tool) => ({ tool: tool.slug }));
+    .map((tool) => ({
+      tool: tool.slug,
+    }));
 }
 
 export default async function Page({
@@ -31,19 +33,20 @@ export default async function Page({
 
   const cookieStore = await cookies();
   const locale = normalizeLocale(cookieStore.get('nexa_locale')?.value);
+  const localized = localizeTool(selectedTool, locale);
 
   return (
     <>
       <PageHeader
-        eyebrow={selectedTool.category.toUpperCase()}
-        title={selectedTool.title}
-        description={selectedTool.description}
+        eyebrow={localized.displayCategory}
+        title={localized.displayTitle}
+        description={localized.displayDescription}
       />
 
       <ToolRunner
         slug={selectedTool.slug}
-        title={selectedTool.title}
-        description={selectedTool.description}
+        title={localized.displayTitle}
+        description={localized.displayDescription}
         locale={locale}
       />
     </>
