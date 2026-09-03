@@ -122,7 +122,7 @@ export async function GET(
       },
     });
 
-    if (status === 'COMPLETED' && current.status !== 'COMPLETED') {
+    if (status === 'COMPLETED') {
       await db.activityLog
         .create({
           data: {
