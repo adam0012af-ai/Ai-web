@@ -51,7 +51,108 @@ button,input,textarea,select{font:inherit}
   text-align:right
 }
 
+/* Unified AI Markdown renderer */
+.ai-markdown{
+  min-width:0;
+  overflow-wrap:anywhere;
+  color:var(--fg);
+  font-size:.94rem;
+  line-height:1.9
+}
+.ai-markdown>*:first-child{margin-top:0}
+.ai-markdown>*:last-child{margin-bottom:0}
+.ai-markdown h1,
+.ai-markdown h2,
+.ai-markdown h3,
+.ai-markdown h4{
+  margin:1.2em 0 .55em;
+  font-weight:900;
+  line-height:1.45;
+  letter-spacing:-.01em
+}
+.ai-markdown h1{font-size:1.45rem}
+.ai-markdown h2{font-size:1.25rem}
+.ai-markdown h3{font-size:1.08rem}
+.ai-markdown p{margin:.7em 0}
+.ai-markdown ul,
+.ai-markdown ol{
+  margin:.7em 0;
+  padding-inline-start:1.5rem
+}
+.ai-markdown li{margin:.28em 0}
+.ai-markdown li::marker{color:var(--brand)}
+.ai-markdown strong{font-weight:900}
+.ai-markdown em{color:var(--muted)}
+.ai-markdown blockquote{
+  margin:1em 0;
+  border-inline-start:3px solid var(--brand);
+  padding:.2rem 1rem;
+  color:var(--muted);
+  background:color-mix(in srgb,var(--brand) 5%,transparent);
+  border-radius:.5rem
+}
+.ai-markdown code{
+  direction:ltr;
+  unicode-bidi:embed;
+  border:1px solid var(--line);
+  border-radius:.4rem;
+  background:color-mix(in srgb,var(--card) 84%,var(--fg) 4%);
+  padding:.1rem .35rem;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  font-size:.88em
+}
+.ai-markdown pre{
+  direction:ltr;
+  max-width:100%;
+  overflow:auto;
+  margin:1rem 0;
+  border:1px solid var(--line);
+  border-radius:1rem;
+  background:#080a0f;
+  padding:1rem;
+  color:#f4f7fb;
+  text-align:left
+}
+.ai-markdown pre code{
+  border:0;
+  background:transparent;
+  padding:0;
+  color:inherit;
+  white-space:pre
+}
+.ai-markdown table{
+  display:block;
+  max-width:100%;
+  overflow-x:auto;
+  border-collapse:collapse;
+  margin:1rem 0;
+  white-space:nowrap
+}
+.ai-markdown th,
+.ai-markdown td{
+  border:1px solid var(--line);
+  padding:.65rem .8rem;
+  text-align:start
+}
+.ai-markdown th{
+  background:color-mix(in srgb,var(--brand) 8%,var(--card));
+  font-weight:900
+}
+.ai-markdown a{
+  color:var(--brand);
+  text-decoration:underline;
+  text-underline-offset:3px
+}
+.ai-markdown hr{
+  margin:1.35rem 0;
+  border:0;
+  border-top:1px solid var(--line)
+}
+
 @media(max-width:700px){
   .shell{padding-inline:16px}
   input,textarea,select{font-size:16px}
+  .ai-markdown{font-size:.92rem;line-height:1.85}
+  .ai-markdown h1{font-size:1.3rem}
+  .ai-markdown h2{font-size:1.16rem}
 }

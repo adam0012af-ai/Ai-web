@@ -1,12 +1,24 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Copy, Edit3, Pin, Plus, Send, Square, Star, Trash2 } from 'lucide-react';
+import {
+  Copy,
+  Download,
+  Edit3,
+  Pin,
+  Plus,
+  Send,
+  Square,
+  Star,
+  Trash2,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import type { AppLocale } from '@/lib/i18n';
 import { getDashboardText } from '@/lib/i18n';
+import { MarkdownMessage } from './markdown-message';
 
 type Conv = {
   id: string;
@@ -34,6 +46,7 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
   const [busy, setBusy] = useState(false);
   const [streaming, setStreaming] = useState('');
   const [uiError, setUiError] = useState('');
+  const [copiedId, setCopiedId] = useState('');
 
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
@@ -62,7 +75,9 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
       }
 
       const data = await response.json();
-      const list = Array.isArray(data?.conversations) ? data.conversations : [];
+      const list = Array.isArray(data?.conversations)
+        ? data.conversations
+        : [];
 
       setConvs(list);
 
@@ -229,15 +244,6 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
             : t.genericAiError;
 
         setUiError(message);
-
-        setMessages((current) => [
-          ...current,
-          {
-            id: `err-${Date.now()}`,
-            role: 'ASSISTANT',
-            content: t.genericAiError,
-          },
-        ]);
       }
     } finally {
       setBusy(false);
@@ -284,9 +290,32 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
       await loadConversations();
     } catch (error) {
       setUiError(
-        error instanceof Error ? error.message : t.updateConversationError,
+        error instanceof Error
+          ? error.message
+          : t.updateConversationError,
       );
     }
+  }
+
+  async function copyMessage(message: Msg) {
+    await navigator.clipboard.writeText(message.content);
+    setCopiedId(message.id);
+    window.setTimeout(() => setCopiedId(''), 1200);
+  }
+
+  function downloadMessage(message: Msg) {
+    const blob = new Blob([message.content], {
+      type: 'text/markdown;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+
+    anchor.href = url;
+    anchor.download = 'nexa-ai-response.md';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -318,7 +347,9 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
               <div
                 key={conversation.id}
                 className={`group rounded-xl p-2 ${
-                  active === conversation.id ? 'bg-[var(--brand)]/10' : ''
+                  active === conversation.id
+                    ? 'bg-[var(--brand)]/10'
+                    : ''
                 }`}
               >
                 <button
@@ -385,7 +416,7 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
         ) : null}
 
         <div className="flex-1 overflow-auto p-3 sm:p-6">
-          <div className="mx-auto max-w-3xl space-y-5">
+          <div className="mx-auto max-w-3xl space-y-6">
             {!messages.length && !streaming ? (
               <div className="py-12 text-center sm:py-20">
                 <h2 className="text-2xl font-black">{t.workingOn}</h2>
@@ -406,36 +437,54 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
               </div>
             ) : null}
 
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={
-                  message.role === 'USER'
-                    ? `max-w-[88%] rounded-2xl bg-[var(--brand)] px-4 py-3 text-sm text-white ${
-                        ar ? 'me-auto' : 'ms-auto'
-                      }`
-                    : 'group max-w-[95%] text-sm leading-7'
-                }
-              >
-                <div className="whitespace-pre-wrap">{message.content}</div>
+            {messages.map((message) =>
+              message.role === 'USER' ? (
+                <div
+                  key={message.id}
+                  className="ms-auto max-w-[88%] rounded-2xl bg-[var(--brand)] px-4 py-3 text-sm leading-7 text-white"
+                  dir="auto"
+                >
+                  {message.content}
+                </div>
+              ) : message.role === 'ASSISTANT' ? (
+                <article key={message.id} className="group">
+                  <MarkdownMessage content={message.content} />
 
-                {message.role === 'ASSISTANT' ? (
-                  <button
-                    className="muted mt-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                    onClick={() =>
-                      navigator.clipboard.writeText(message.content)
-                    }
-                    aria-label="Copy"
-                  >
-                    <Copy size={14} />
-                  </button>
-                ) : null}
-              </div>
-            ))}
+                  <div className="mt-2 flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      className="h-8 px-2"
+                      onClick={() => void copyMessage(message)}
+                      aria-label="Copy"
+                    >
+                      <Copy size={14} />
+                      <span className="text-xs">
+                        {copiedId === message.id
+                          ? ar
+                            ? 'تم النسخ'
+                            : 'Copied'
+                          : ar
+                            ? 'نسخ'
+                            : 'Copy'}
+                      </span>
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      className="h-8 px-2"
+                      onClick={() => downloadMessage(message)}
+                      aria-label="Download"
+                    >
+                      <Download size={14} />
+                    </Button>
+                  </div>
+                </article>
+              ) : null,
+            )}
 
             {streaming ? (
-              <div className="max-w-[95%] whitespace-pre-wrap text-sm leading-7">
-                {streaming}
+              <div>
+                <MarkdownMessage content={streaming} />
                 <span className="animate-pulse">▍</span>
               </div>
             ) : null}
@@ -444,9 +493,10 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
           </div>
         </div>
 
-        <div className="sticky bottom-0 border-t border-[var(--line)] bg-[var(--card)] p-3 sm:p-4">
-          <div className="mx-auto flex max-w-3xl gap-2">
-            <Input
+        <div className="sticky bottom-0 border-t border-[var(--line)] bg-[var(--card)]/95 p-3 backdrop-blur-xl sm:p-4">
+          <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-[var(--line)] bg-[var(--bg)] p-2">
+            <Textarea
+              rows={1}
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
@@ -455,27 +505,35 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
                   void send();
                 }
               }}
+              onInput={(event) => {
+                event.currentTarget.style.height = 'auto';
+                event.currentTarget.style.height = `${Math.min(
+                  event.currentTarget.scrollHeight,
+                  160,
+                )}px`;
+              }}
               placeholder={t.messagePlaceholder}
               disabled={busy}
+              className="min-h-11 max-h-40 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
             />
 
             {busy ? (
               <Button
                 variant="secondary"
                 onClick={() => abort.current?.abort()}
-                className="shrink-0"
+                className="size-10 shrink-0 rounded-xl p-0"
+                aria-label={t.stop}
               >
                 <Square size={15} />
-                <span className="hidden sm:inline">{t.stop}</span>
               </Button>
             ) : (
               <Button
                 onClick={() => void send()}
                 disabled={!input.trim()}
-                className="shrink-0"
+                className="size-10 shrink-0 rounded-xl p-0"
+                aria-label={t.send}
               >
                 <Send size={16} />
-                <span className="hidden sm:inline">{t.send}</span>
               </Button>
             )}
           </div>

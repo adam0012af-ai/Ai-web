@@ -19,10 +19,16 @@ const imageSchema = z.object({
   data: z.string().min(100).max(3_700_000),
 });
 
+const historyMessageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().trim().min(1).max(12000),
+});
+
 const schema = z.object({
   feature: z.string().min(1).max(40),
   input: z.string().trim().min(1).max(30000),
   images: z.array(imageSchema).max(1).optional(),
+  history: z.array(historyMessageSchema).max(10).optional(),
 });
 
 export async function POST(req: Request) {
@@ -61,7 +67,7 @@ export async function POST(req: Request) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Check your input or image size.' },
+        { error: 'Check your input, attachment, or conversation size.' },
         { status: 400 },
       );
     }
@@ -135,6 +141,8 @@ export async function POST(req: Request) {
       }
     }
 
+    const history = (parsed.data.history ?? []).slice(-10);
+
     const result = await routeAI({
       userId: user.id,
       feature: parsed.data.feature,
@@ -143,6 +151,10 @@ export async function POST(req: Request) {
           role: 'system',
           content: promptForFeature(parsed.data.feature),
         },
+        ...history.map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
         {
           role: 'user',
           content: parsed.data.input,
@@ -151,6 +163,7 @@ export async function POST(req: Request) {
       images,
       cacheable:
         !images?.length &&
+        history.length === 0 &&
         ['summarizer', 'analysis', 'seo'].includes(parsed.data.feature),
     });
 
@@ -158,6 +171,7 @@ export async function POST(req: Request) {
       text: result.text,
       fallbackUsed: result.fallbackUsed,
       cached: result.cached ?? false,
+      latency: result.latency,
     });
   } catch (error) {
     if (error instanceof RateLimitError) {
