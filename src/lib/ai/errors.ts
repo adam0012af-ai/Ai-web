@@ -1,0 +1,2 @@
+export class AIProviderError extends Error{constructor(message:string,public code:string,public retryable=true,public status?:number){super(message);}}
+export function normalizeProviderError(error:unknown){if(error instanceof AIProviderError)return error;if(error instanceof DOMException&&error.name==='AbortError')return new AIProviderError('Provider timeout','TIMEOUT',true,408);return new AIProviderError(error instanceof Error?error.message:'Unknown provider failure','PROVIDER_ERROR',true);}

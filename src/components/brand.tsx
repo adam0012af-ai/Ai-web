@@ -1,0 +1,1 @@
+import Link from 'next/link';import { Sparkles } from 'lucide-react';export function Brand(){return <Link href="/" className="flex items-center gap-2 font-black tracking-tight"><span className="brand-gradient grid size-9 place-items-center rounded-xl"><Sparkles size={17}/></span><span>Nexa AI</span></Link>}

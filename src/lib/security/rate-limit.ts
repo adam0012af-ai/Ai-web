@@ -1,0 +1,3 @@
+import { db } from '@/lib/db';
+export class RateLimitError extends Error { constructor(public retryAfter:number){super('Rate limit exceeded');} }
+export async function enforceRateLimit(key:string,limit:number,windowSeconds:number){const now=new Date();const ms=windowSeconds*1000;const start=new Date(Math.floor(now.getTime()/ms)*ms);const expiresAt=new Date(start.getTime()+ms);const row=await db.rateLimitBucket.upsert({where:{key_windowStart:{key,windowStart:start}},create:{key,windowStart:start,count:1,expiresAt},update:{count:{increment:1},expiresAt}});if(row.count>limit)throw new RateLimitError(Math.max(1,Math.ceil((expiresAt.getTime()-Date.now())/1000)));return {remaining:Math.max(0,limit-row.count),resetAt:expiresAt};}

@@ -1,0 +1,1 @@
+import { Suspense } from 'react';import { AuthShell } from '@/components/auth/auth-shell';import { SimpleActionForm } from '@/components/auth/simple-action-form';export default function Page(){return <AuthShell title="Choose a new password" subtitle="Your reset token is single-use and time-limited."><Suspense><SimpleActionForm kind="reset"/></Suspense></AuthShell>}

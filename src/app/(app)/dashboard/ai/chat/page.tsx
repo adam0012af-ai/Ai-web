@@ -1,0 +1,1 @@
+import { PageHeader } from '@/components/dashboard/page-header';import { ChatWorkspace } from '@/components/ai/chat-workspace';export default function Page(){return <><PageHeader title="AI Chat" description="Persistent conversations with automatic provider fallback and recent-context management."/><ChatWorkspace/></>}

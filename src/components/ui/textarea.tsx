@@ -1,0 +1,1 @@
+import { cn } from '@/lib/utils';import type { TextareaHTMLAttributes } from 'react';export function Textarea({className,...p}:TextareaHTMLAttributes<HTMLTextAreaElement>){return <textarea className={cn('focus-ring min-h-32 w-full resize-y rounded-xl border border-[var(--line)] bg-transparent p-3 text-sm outline-none placeholder:text-[var(--muted)]',className)} {...p}/>;}

@@ -1,0 +1,1 @@
+import { cn } from '@/lib/utils';import type { HTMLAttributes } from 'react';export function Badge({className,...p}:HTMLAttributes<HTMLSpanElement>){return <span className={cn('inline-flex rounded-full border border-[var(--line)] px-2.5 py-1 text-xs font-semibold',className)} {...p}/>;}

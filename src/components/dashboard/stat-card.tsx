@@ -1,0 +1,1 @@
+import { Card } from '@/components/ui/card';export function StatCard({label,value,detail}:{label:string;value:string|number;detail?:string}){return <Card className="p-5"><div className="muted text-xs font-semibold">{label}</div><div className="mt-2 text-3xl font-black">{value}</div>{detail&&<div className="muted mt-2 text-xs">{detail}</div>}</Card>}

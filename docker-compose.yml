@@ -1,0 +1,11 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: nexa_ai
+    ports: ["5432:5432"]
+    volumes: ["nexa_pg:/var/lib/postgresql/data"]
+volumes:
+  nexa_pg:

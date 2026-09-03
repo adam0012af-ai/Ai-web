@@ -1,0 +1,3 @@
+import { NextRequest, NextResponse } from 'next/server';
+export function proxy(req:NextRequest){const hasSession=!!req.cookies.get('nexa_session')?.value;const path=req.nextUrl.pathname;if((path.startsWith('/dashboard')||path.startsWith('/admin'))&&!hasSession){const url=new URL('/login',req.url);url.searchParams.set('next',path);return NextResponse.redirect(url);}return NextResponse.next();}
+export const config={matcher:['/dashboard/:path*','/admin/:path*']};

@@ -1,0 +1,1 @@
+import { cn } from '@/lib/utils';import type { InputHTMLAttributes } from 'react';export function Input({className,...p}:InputHTMLAttributes<HTMLInputElement>){return <input className={cn('focus-ring h-11 w-full rounded-xl border border-[var(--line)] bg-transparent px-3 text-sm outline-none placeholder:text-[var(--muted)]',className)} {...p}/>;}

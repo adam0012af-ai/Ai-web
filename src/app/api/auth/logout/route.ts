@@ -1,0 +1,1 @@
+import { NextResponse } from 'next/server';import { destroySession } from '@/lib/auth/session';import { verifyCsrf } from '@/lib/security/csrf';export async function POST(req:Request){if(!await verifyCsrf(req))return NextResponse.json({error:'Invalid request token'},{status:403});await destroySession();return NextResponse.json({ok:true});}

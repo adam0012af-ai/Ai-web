@@ -1,0 +1,1 @@
+export default function Loading(){return <main className="shell py-16"><div className="surface animate-pulse rounded-3xl p-8"><div className="mb-4 h-8 w-1/3 rounded bg-black/10 dark:bg-white/10"/><div className="h-4 w-2/3 rounded bg-black/10 dark:bg-white/10"/></div></main>}

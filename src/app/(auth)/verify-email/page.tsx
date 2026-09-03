@@ -1,0 +1,1 @@
+import { Suspense } from 'react';import { AuthShell } from '@/components/auth/auth-shell';import { SimpleActionForm } from '@/components/auth/simple-action-form';export default function Page(){return <AuthShell title="Verify your email" subtitle="Confirm your address to complete account verification."><Suspense><SimpleActionForm kind="verify"/></Suspense></AuthShell>}

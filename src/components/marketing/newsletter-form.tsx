@@ -1,0 +1,5 @@
+'use client';
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+export function NewsletterForm(){const [msg,setMsg]=useState(''),[busy,setBusy]=useState(false);async function go(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);const fd=new FormData(e.currentTarget);const c=await fetch('/api/csrf').then(r=>r.json());const res=await fetch('/api/newsletter',{method:'POST',headers:{'content-type':'application/json','x-csrf-token':c.token},body:JSON.stringify({email:fd.get('email')})});const j=await res.json();setMsg(j.message??j.error??'Unable to subscribe');setBusy(false);if(res.ok)e.currentTarget.reset()}return <form onSubmit={go} className="mt-6 flex flex-col gap-2 sm:flex-row"><Input name="email" type="email" required placeholder="you@company.com" aria-label="Email for newsletter"/><Button disabled={busy}>{busy?'Joining…':'Join newsletter'}</Button>{msg&&<span className="muted self-center text-xs">{msg}</span>}</form>}
