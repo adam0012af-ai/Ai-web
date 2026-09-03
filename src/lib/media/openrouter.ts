@@ -1,7 +1,13 @@
+type ParameterDescriptor =
+  | { type?: 'enum'; values?: Array<string | number> }
+  | { type?: 'range'; min?: number; max?: number }
+  | { type?: 'boolean' }
+  | unknown;
+
 type OpenRouterModel = {
   id: string;
   name?: string;
-  supported_parameters?: string[];
+  supported_parameters?: Record<string, ParameterDescriptor> | string[];
   supported_durations?: number[];
   supported_resolutions?: string[];
   supported_aspect_ratios?: string[];
@@ -128,6 +134,36 @@ function chooseModel(
   return compatible[0] ?? models[0] ?? null;
 }
 
+function enumParameterValues(model: OpenRouterModel, parameter: string) {
+  const supported = model.supported_parameters;
+  if (!supported || Array.isArray(supported)) return [] as Array<string | number>;
+
+  const descriptor = supported[parameter];
+  if (!descriptor || typeof descriptor !== 'object' || Array.isArray(descriptor)) {
+    return [] as Array<string | number>;
+  }
+
+  const values = (descriptor as { values?: unknown }).values;
+  return Array.isArray(values)
+    ? values.filter((value): value is string | number => typeof value === 'string' || typeof value === 'number')
+    : [];
+}
+
+function rangeParameterAccepts(model: OpenRouterModel, parameter: string, value: number) {
+  const supported = model.supported_parameters;
+  if (!supported || Array.isArray(supported)) return null;
+
+  const descriptor = supported[parameter];
+  if (!descriptor || typeof descriptor !== 'object' || Array.isArray(descriptor)) return null;
+
+  const range = descriptor as { type?: string; min?: unknown; max?: unknown };
+  if (range.type !== 'range') return null;
+
+  const min = typeof range.min === 'number' ? range.min : Number.NEGATIVE_INFINITY;
+  const max = typeof range.max === 'number' ? range.max : Number.POSITIVE_INFINITY;
+  return value >= min && value <= max;
+}
+
 export async function resolveImageModel(mode: 'fast' | 'balanced' | 'quality' = 'balanced') {
   const models = await listModels('image').catch(() => [] as OpenRouterModel[]);
   const preferences =
@@ -184,10 +220,14 @@ export async function generateImage(input: {
     ];
   }
 
-  const response = await openrouter('/images', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  }, 120_000);
+  const response = await openrouter(
+    '/images',
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+    120_000,
+  );
   const result = (await response.json()) as {
     data?: ImageOutput[];
     usage?: { cost?: number };
@@ -210,14 +250,38 @@ export async function generateImage(input: {
   } satisfies ImageGenerationResult;
 }
 
-function supportsVideoValue(model: OpenRouterModel, field: 'duration' | 'resolution' | 'aspectRatio', value: number | string) {
+function supportsVideoValue(
+  model: OpenRouterModel,
+  field: 'duration' | 'resolution' | 'aspectRatio',
+  value: number | string,
+) {
   if (field === 'duration') {
-    return !model.supported_durations?.length || model.supported_durations.includes(Number(value));
+    if (model.supported_durations?.length) {
+      return model.supported_durations.includes(Number(value));
+    }
+
+    const enumValues = enumParameterValues(model, 'duration').map(Number).filter(Number.isFinite);
+    if (enumValues.length) return enumValues.includes(Number(value));
+
+    const ranged = rangeParameterAccepts(model, 'duration', Number(value));
+    return ranged ?? true;
   }
+
   if (field === 'resolution') {
-    return !model.supported_resolutions?.length || model.supported_resolutions.includes(String(value));
+    if (model.supported_resolutions?.length) {
+      return model.supported_resolutions.includes(String(value));
+    }
+
+    const enumValues = enumParameterValues(model, 'resolution').map(String);
+    return enumValues.length ? enumValues.includes(String(value)) : true;
   }
-  return !model.supported_aspect_ratios?.length || model.supported_aspect_ratios.includes(String(value));
+
+  if (model.supported_aspect_ratios?.length) {
+    return model.supported_aspect_ratios.includes(String(value));
+  }
+
+  const enumValues = enumParameterValues(model, 'aspect_ratio').map(String);
+  return enumValues.length ? enumValues.includes(String(value)) : true;
 }
 
 export async function resolveVideoModel(input: {
@@ -255,17 +319,21 @@ export async function submitVideo(input: {
   mode?: 'fast' | 'balanced' | 'quality';
 }) {
   const model = await resolveVideoModel(input);
-  const response = await openrouter('/videos', {
-    method: 'POST',
-    body: JSON.stringify({
-      model,
-      prompt: input.prompt,
-      duration: input.duration,
-      resolution: input.resolution,
-      aspect_ratio: input.aspectRatio,
-      generate_audio: input.generateAudio,
-    }),
-  }, 60_000);
+  const response = await openrouter(
+    '/videos',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        model,
+        prompt: input.prompt,
+        duration: input.duration,
+        resolution: input.resolution,
+        aspect_ratio: input.aspectRatio,
+        generate_audio: input.generateAudio,
+      }),
+    },
+    60_000,
+  );
 
   const job = (await response.json()) as VideoGenerationJob;
   if (!job.id) throw new Error('OpenRouter did not return a video job ID.');
@@ -273,15 +341,27 @@ export async function submitVideo(input: {
   return { job, model };
 }
 
+function safeVideoJobId(id: string) {
+  const value = id.trim();
+  if (!/^[A-Za-z0-9._-]{1,200}$/.test(value)) {
+    throw new Error('Invalid external video job ID.');
+  }
+  return value;
+}
+
 export async function getVideoJob(id: string) {
-  if (!/^job-[A-Za-z0-9_-]+$/.test(id)) throw new Error('Invalid external video job ID.');
-  const response = await openrouter(`/videos/${encodeURIComponent(id)}`, {}, 30_000);
+  const safeId = safeVideoJobId(id);
+  const response = await openrouter(`/videos/${encodeURIComponent(safeId)}`, {}, 30_000);
   return (await response.json()) as VideoGenerationJob;
 }
 
 export async function getVideoContent(id: string, index = 0) {
-  if (!/^job-[A-Za-z0-9_-]+$/.test(id)) throw new Error('Invalid external video job ID.');
-  return openrouter(`/videos/${encodeURIComponent(id)}/content?index=${Math.max(0, Math.min(4, index))}`, {}, 120_000);
+  const safeId = safeVideoJobId(id);
+  return openrouter(
+    `/videos/${encodeURIComponent(safeId)}/content?index=${Math.max(0, Math.min(4, index))}`,
+    {},
+    120_000,
+  );
 }
 
 export async function getAvailableMediaModels(kind: 'image' | 'video') {
