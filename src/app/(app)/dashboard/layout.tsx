@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+import { MobileBottomNav } from '@/components/dashboard/mobile-bottom-nav';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { Topbar } from '@/components/dashboard/topbar';
 import { getCurrentUser } from '@/lib/auth/session';
@@ -31,8 +32,12 @@ export default async function Layout({
       <div className="min-w-0 flex-1">
         <Topbar locale={locale} />
 
-        <main className="min-w-0 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="min-w-0 p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8">
+          {children}
+        </main>
       </div>
+
+      <MobileBottomNav locale={locale} />
     </div>
   );
 }
