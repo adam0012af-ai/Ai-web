@@ -11,56 +11,29 @@ export async function GET(req: Request) {
   const user = await getCurrentUser();
 
   if (!user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const q =
-    new URL(req.url).searchParams
-      .get('q')
-      ?.trim()
-      .slice(0, 80) ?? '';
+  const q = new URL(req.url).searchParams.get('q')?.trim().slice(0, 80) ?? '';
 
   if (q.length < 2) {
     return NextResponse.json({ results: [] });
   }
 
   const cookieStore = await cookies();
-  const locale = normalizeLocale(
-    cookieStore.get('nexa_locale')?.value,
-  );
+  const locale = normalizeLocale(cookieStore.get('nexa_locale')?.value);
   const labels = getProductMessages(locale).search;
   const mediaJobLabel = locale === 'ar' ? 'مهمة إنتاج' : 'Media job';
   const mediaAssetLabel = locale === 'ar' ? 'وسائط' : 'Media asset';
 
-  const [
-    projects,
-    prompts,
-    conversations,
-    files,
-    mediaJobs,
-    mediaAssets,
-    posts,
-  ] = await Promise.all([
+  const [projects, prompts, conversations, files, mediaJobs, mediaAssets, posts] = await Promise.all([
     db.project.findMany({
       where: {
         userId: user.id,
         archived: false,
         OR: [
-          {
-            name: {
-              contains: q,
-              mode: 'insensitive',
-            },
-          },
-          {
-            description: {
-              contains: q,
-              mode: 'insensitive',
-            },
-          },
+          { name: { contains: q, mode: 'insensitive' } },
+          { description: { contains: q, mode: 'insensitive' } },
         ],
       },
       take: 5,
@@ -70,18 +43,8 @@ export async function GET(req: Request) {
       where: {
         userId: user.id,
         OR: [
-          {
-            title: {
-              contains: q,
-              mode: 'insensitive',
-            },
-          },
-          {
-            content: {
-              contains: q,
-              mode: 'insensitive',
-            },
-          },
+          { title: { contains: q, mode: 'insensitive' } },
+          { content: { contains: q, mode: 'insensitive' } },
         ],
       },
       take: 5,
@@ -90,10 +53,7 @@ export async function GET(req: Request) {
     db.conversation.findMany({
       where: {
         userId: user.id,
-        title: {
-          contains: q,
-          mode: 'insensitive',
-        },
+        title: { contains: q, mode: 'insensitive' },
       },
       take: 5,
       orderBy: { updatedAt: 'desc' },
@@ -101,10 +61,7 @@ export async function GET(req: Request) {
     db.uploadedFile.findMany({
       where: {
         userId: user.id,
-        name: {
-          contains: q,
-          mode: 'insensitive',
-        },
+        name: { contains: q, mode: 'insensitive' },
       },
       take: 5,
       orderBy: { createdAt: 'desc' },
@@ -113,18 +70,8 @@ export async function GET(req: Request) {
       where: {
         userId: user.id,
         OR: [
-          {
-            title: {
-              contains: q,
-              mode: 'insensitive',
-            },
-          },
-          {
-            prompt: {
-              contains: q,
-              mode: 'insensitive',
-            },
-          },
+          { title: { contains: q, mode: 'insensitive' } },
+          { prompt: { contains: q, mode: 'insensitive' } },
         ],
       },
       take: 5,
@@ -133,10 +80,7 @@ export async function GET(req: Request) {
     db.mediaAsset.findMany({
       where: {
         userId: user.id,
-        name: {
-          contains: q,
-          mode: 'insensitive',
-        },
+        name: { contains: q, mode: 'insensitive' },
       },
       take: 5,
       orderBy: { createdAt: 'desc' },
@@ -145,18 +89,8 @@ export async function GET(req: Request) {
       where: {
         published: true,
         OR: [
-          {
-            title: {
-              contains: q,
-              mode: 'insensitive',
-            },
-          },
-          {
-            excerpt: {
-              contains: q,
-              mode: 'insensitive',
-            },
-          },
+          { title: { contains: q, mode: 'insensitive' } },
+          { excerpt: { contains: q, mode: 'insensitive' } },
         ],
       },
       take: 5,
@@ -183,14 +117,17 @@ export async function GET(req: Request) {
     .slice(0, 5)
     .map((tool) => {
       const localized = localizeTool(tool, locale);
+      const href =
+        tool.slug === 'chat'
+          ? '/dashboard/ai/chat'
+          : tool.slug === 'code'
+            ? '/dashboard/code'
+            : `/dashboard/ai/${tool.slug}`;
 
       return {
         type: labels.aiTool,
         label: localized.displayTitle,
-        href:
-          tool.slug === 'chat'
-            ? '/dashboard/ai/chat'
-            : `/dashboard/ai/${tool.slug}`,
+        href,
       };
     });
 
