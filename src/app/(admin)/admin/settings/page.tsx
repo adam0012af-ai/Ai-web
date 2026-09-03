@@ -1,1 +1,21 @@
-import { PageHeader } from '@/components/dashboard/page-header';import { Card } from '@/components/ui/card';export default function Page(){return <><PageHeader title="Platform settings" description="Operational settings for the SaaS application."/><Card className="max-w-3xl p-6"><p className="muted leading-7">Provider settings live in the AI administration area. Production systems can extend this page with branded configuration, feature flags, email transport, storage, and business policies.</p></Card></>}
+import { cookies } from 'next/headers';
+
+import { PageHeader } from '@/components/dashboard/page-header';
+import { Card } from '@/components/ui/card';
+import { getAdminMessages } from '@/lib/admin-messages';
+import { normalizeLocale } from '@/lib/i18n';
+
+export default async function Page() {
+  const cookieStore = await cookies();
+  const locale = normalizeLocale(cookieStore.get('nexa_locale')?.value);
+  const t = getAdminMessages(locale).settings;
+
+  return (
+    <>
+      <PageHeader eyebrow={t.eyebrow} title={t.title} description={t.description} />
+      <Card className="max-w-3xl p-6">
+        <p className="muted leading-7">{t.body}</p>
+      </Card>
+    </>
+  );
+}
