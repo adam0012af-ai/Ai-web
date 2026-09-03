@@ -109,3 +109,5 @@ The architecture intentionally leaves external provider-specific work explicit i
 ## Deployment
 
 The repository includes `vercel.json` and is designed for Vercel Git integration. Add environment variables in Vercel before the first successful production deployment. Vercel will run `npm install` and `npm run build`.
+
+RTL update
