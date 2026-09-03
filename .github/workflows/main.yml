@@ -24,33 +24,42 @@ jobs:
       - name: Verify ZIP file
         shell: bash
         run: |
+          set -e
           ZIP="${{ inputs.zip_file }}"
+
           if [ ! -f "$ZIP" ]; then
             echo "ZIP file not found: $ZIP"
-            echo "Files in repository root:"
+            echo "Repository root files:"
             ls -la
             exit 1
           fi
 
-      - name: Extract project
+      - name: Extract project safely
         shell: bash
         run: |
           set -e
           ZIP="${{ inputs.zip_file }}"
+
           rm -rf .unpack
           mkdir -p .unpack
           unzip -q "$ZIP" -d .unpack
 
-          # If the ZIP contains exactly one top-level folder,
-          # move that folder's CONTENTS to the repository root.
           TOP_DIRS=$(find .unpack -mindepth 1 -maxdepth 1 -type d | wc -l)
           TOP_FILES=$(find .unpack -mindepth 1 -maxdepth 1 -type f | wc -l)
 
+          # GitHub's default Actions token cannot push/create workflow files.
+          # Keep the workflow already in the repo and skip workflows from the ZIP.
           if [ "$TOP_DIRS" -eq 1 ] && [ "$TOP_FILES" -eq 0 ]; then
             ROOT_DIR=$(find .unpack -mindepth 1 -maxdepth 1 -type d | head -n 1)
-            rsync -a --exclude='.git' "$ROOT_DIR"/ ./
+            rsync -a \
+              --exclude='.git' \
+              --exclude='.github/workflows/' \
+              "$ROOT_DIR"/ ./
           else
-            rsync -a --exclude='.git' .unpack/ ./
+            rsync -a \
+              --exclude='.git' \
+              --exclude='.github/workflows/' \
+              .unpack/ ./
           fi
 
           rm -rf .unpack
@@ -59,10 +68,15 @@ jobs:
       - name: Commit extracted files
         shell: bash
         run: |
+          set -e
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add -A
+
+          # Safety: never let this workflow modify files under .github/workflows.
+          git reset -- .github/workflows 2>/dev/null || true
 
           if git diff --cached --quiet; then
             echo "No changes to commit."
@@ -70,4 +84,17 @@ jobs:
           fi
 
           git commit -m "Extract project files"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+          # Small retry for transient network/server failures.
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Project files pushed successfully."
+              exit 0
+            fi
+
+            echo "Push attempt $attempt failed. Retrying..."
+            sleep $((attempt * 3))
+          done
+
+          echo "Push failed after 3 attempts."
+          exit 1
