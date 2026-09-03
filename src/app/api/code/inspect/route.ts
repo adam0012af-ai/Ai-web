@@ -9,7 +9,9 @@ import { requestFingerprint } from '@/lib/security/request';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const MAX_ARCHIVE_BYTES = 25 * 1024 * 1024;
+// Vercel Functions accept request bodies up to 4.5 MB. Keep enough room for
+// multipart/form-data overhead and cookies/metadata so production uploads are reliable.
+const MAX_ARCHIVE_BYTES = Math.floor(3.5 * 1024 * 1024);
 const MAX_PREVIEW_BYTES = 1_200_000;
 
 export async function POST(req: Request) {
@@ -35,7 +37,13 @@ export async function POST(req: Request) {
     }
 
     if (archive.size <= 0 || archive.size > MAX_ARCHIVE_BYTES) {
-      return NextResponse.json({ error: 'ZIP must be smaller than 25 MB.' }, { status: 413 });
+      return NextResponse.json(
+        {
+          error:
+            'This deployment accepts ZIP archives up to 3.5 MB compressed. Remove node_modules, build output, media, and other generated files before uploading.',
+        },
+        { status: 413 },
+      );
     }
 
     const parsed = parseSourceZip(Buffer.from(await archive.arrayBuffer()));
@@ -47,7 +55,11 @@ export async function POST(req: Request) {
       .map((file) => {
         let content: string | null = null;
 
-        if (file.text && file.data.length <= 140_000 && previewBytes + file.data.length <= MAX_PREVIEW_BYTES) {
+        if (
+          file.text &&
+          file.data.length <= 140_000 &&
+          previewBytes + file.data.length <= MAX_PREVIEW_BYTES
+        ) {
           content = file.data.toString('utf8');
           previewBytes += file.data.length;
         }
