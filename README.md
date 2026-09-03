@@ -83,6 +83,8 @@ npm run typecheck
 npm run build
 ```
 
+GitHub also runs **Validate Nexa V6** on `main` to generate Prisma, type-check TypeScript, and run the i18n audit before browser testing.
+
 ## Database seed accounts
 
 After `npm run db:seed`:
@@ -104,10 +106,14 @@ The architecture intentionally leaves external provider-specific work explicit i
 
 - transactional email transport (Resend / SES / SMTP)
 - payment gateway for paid plans
-- object storage for real file uploads (S3 / R2 / Vercel Blob etc.)
+- object storage for persistent large file/media uploads (S3 / R2 / Vercel Blob etc.)
 
 ## Deployment
 
 The repository includes `vercel.json` and is designed for Vercel Git integration. Add environment variables in Vercel before the first successful production deployment. Vercel will run `npm install` and `npm run build`.
+
+## V6 premium workspace
+
+The current V6 foundation includes Smart Start, unified creation routes, real image/video provider jobs, ZIP-based Code Studio, centralized admin localization, project-scoped AI context, and production validation through GitHub Actions.
 
 RTL update
