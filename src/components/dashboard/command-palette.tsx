@@ -24,11 +24,7 @@ type Item = {
   icon?: typeof Search;
 };
 
-export function CommandPalette({
-  locale,
-}: {
-  locale: AppLocale;
-}) {
+export function CommandPalette({ locale }: { locale: AppLocale }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [remote, setRemote] = useState<Item[]>([]);
@@ -38,17 +34,12 @@ export function CommandPalette({
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === 'k'
-      ) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setOpen((current) => !current);
       }
 
-      if (event.key === 'Escape') {
-        setOpen(false);
-      }
+      if (event.key === 'Escape') setOpen(false);
     };
 
     addEventListener('keydown', listener);
@@ -64,17 +55,9 @@ export function CommandPalette({
     const controller = new AbortController();
     const timer = setTimeout(
       () =>
-        fetch(`/api/search?q=${encodeURIComponent(q)}`, {
-          signal: controller.signal,
-        })
-          .then((response) =>
-            response.ok
-              ? response.json()
-              : { results: [] },
-          )
-          .then((data) =>
-            setRemote(data.results ?? []),
-          )
+        fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: controller.signal })
+          .then((response) => (response.ok ? response.json() : { results: [] }))
+          .then((data) => setRemote(data.results ?? []))
           .catch(() => undefined),
       180,
     );
@@ -86,14 +69,12 @@ export function CommandPalette({
   }, [q]);
 
   const local = useMemo(() => {
-    const nav = [...dashboardNav, ...accountNav].map(
-      ([label, href, Icon, labelAr]) => ({
-        label: ar ? labelAr : label,
-        href,
-        type: t.page,
-        icon: Icon,
-      }),
-    );
+    const nav = [...dashboardNav, ...accountNav].map(([label, href, Icon, labelAr]) => ({
+      label: ar ? labelAr : label,
+      href,
+      type: t.page,
+      icon: Icon,
+    }));
 
     const actions: Item[] = [
       {
@@ -121,8 +102,8 @@ export function CommandPalette({
         icon: Video,
       },
       {
-        label: ar ? 'مساعد البرمجة' : 'Code assistant',
-        href: '/dashboard/ai/code',
+        label: ar ? 'استوديو البرمجة' : 'Code Studio',
+        href: '/dashboard/code',
         type: ar ? 'إجراء' : 'Action',
         icon: Code2,
       },
@@ -136,13 +117,16 @@ export function CommandPalette({
 
     const tools = aiTools.map((tool) => {
       const localized = localizeTool(tool, locale);
+      const href =
+        tool.slug === 'chat'
+          ? '/dashboard/ai/chat'
+          : tool.slug === 'code'
+            ? '/dashboard/code'
+            : `/dashboard/ai/${tool.slug}`;
 
       return {
         label: localized.displayTitle,
-        href:
-          tool.slug === 'chat'
-            ? '/dashboard/ai/chat'
-            : `/dashboard/ai/${tool.slug}`,
+        href,
         type: t.aiTool,
         icon: tool.icon,
       };
@@ -152,21 +136,14 @@ export function CommandPalette({
     const all = [...actions, ...nav, ...tools];
 
     return all
-      .filter((item) =>
-        needle
-          ? item.label.toLowerCase().includes(needle)
-          : true,
-      )
+      .filter((item) => (needle ? item.label.toLowerCase().includes(needle) : true))
       .slice(0, 9);
   }, [q, ar, locale, t.page, t.aiTool]);
 
   const items = [
     ...remote,
     ...local.filter(
-      (localItem) =>
-        !remote.some(
-          (item) => item.href === localItem.href,
-        ),
+      (localItem) => !remote.some((item) => item.href === localItem.href),
     ),
   ].slice(0, 14);
 
@@ -178,12 +155,8 @@ export function CommandPalette({
         className="muted flex items-center gap-2 rounded-xl border border-[var(--line)] p-2 text-start text-sm md:min-w-56 md:px-3"
       >
         <Search size={15} />
-        <span className="hidden md:inline">
-          {t.searchWorkspace}
-        </span>
-        <kbd className="ms-auto hidden text-xs md:inline">
-          ⌘K
-        </kbd>
+        <span className="hidden md:inline">{t.searchWorkspace}</span>
+        <kbd className="ms-auto hidden text-xs md:inline">⌘K</kbd>
       </button>
     );
   }
@@ -203,9 +176,7 @@ export function CommandPalette({
           <input
             autoFocus
             value={q}
-            onChange={(event) =>
-              setQ(event.target.value)
-            }
+            onChange={(event) => setQ(event.target.value)}
             placeholder={t.searchPlaceholder}
             className="w-full bg-transparent py-4 text-start outline-none"
           />
@@ -231,20 +202,14 @@ export function CommandPalette({
                     <Icon size={15} />
                   </span>
                 ) : null}
-                <span className="min-w-0 flex-1 truncate">
-                  {item.label}
-                </span>
-                <span className="muted shrink-0 text-xs">
-                  {item.type}
-                </span>
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                <span className="muted shrink-0 text-xs">{item.type}</span>
               </button>
             );
           })}
 
           {q.length > 1 && !items.length ? (
-            <div className="muted p-5 text-sm">
-              {t.noResults}
-            </div>
+            <div className="muted p-5 text-sm">{t.noResults}</div>
           ) : null}
         </div>
       </div>
