@@ -54,6 +54,8 @@ type RunMeta = {
 
 type Mode = 'analyze' | 'fix' | 'build' | 'audit';
 
+const MAX_ZIP_BYTES = Math.floor(3.5 * 1024 * 1024);
+
 function formatBytes(value: number) {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
@@ -92,7 +94,9 @@ export function CodeStudioClient({ locale }: { locale: AppLocale }) {
         title: 'Nexa Code Studio',
         subtitle: 'ارفع سورس ZIP كامل، افحص المشروع، اطلب إصلاحًا أو ميزة، واستلم ZIP جديد بالتعديلات.',
         upload: 'ارفع مشروع ZIP',
-        uploadHint: 'حتى 25 MB. يتم تجاهل node_modules و .git وملفات البناء، ولا يتم إرسال ملفات الأسرار للذكاء الاصطناعي.',
+        uploadHint: 'حتى 3.5 MB مضغوط حاليًا. احذف node_modules وملفات البناء والوسائط الكبيرة قبل الرفع؛ ملفات الأسرار لا تُرسل للذكاء الاصطناعي.',
+        invalidZip: 'اختر ملف ZIP صالح.',
+        zipTooLarge: 'الحد الحالي على الاستضافة هو 3.5 MB للملف المضغوط. احذف node_modules وملفات البناء والوسائط الكبيرة ثم أعد الضغط.',
         choose: 'اختيار ملف ZIP',
         inspect: 'جاري فحص المشروع…',
         project: 'المشروع',
@@ -130,7 +134,9 @@ export function CodeStudioClient({ locale }: { locale: AppLocale }) {
         title: 'Nexa Code Studio',
         subtitle: 'Upload a full source ZIP, inspect it, request a fix or feature, and receive a new modified ZIP.',
         upload: 'Upload project ZIP',
-        uploadHint: 'Up to 25 MB. node_modules, .git, build output, and sensitive secret files are excluded from AI context.',
+        uploadHint: 'Up to 3.5 MB compressed for this deployment. Remove node_modules, build output, and large media before upload; secret files are excluded from AI context.',
+        invalidZip: 'Choose a valid ZIP file.',
+        zipTooLarge: 'This deployment currently accepts ZIP files up to 3.5 MB compressed. Remove node_modules, build output, and large media, then compress again.',
         choose: 'Choose ZIP file',
         inspect: 'Inspecting project…',
         project: 'Project',
@@ -194,13 +200,24 @@ export function CodeStudioClient({ locale }: { locale: AppLocale }) {
   }
 
   async function inspect(file: File) {
+    setError('');
+
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setError(t.invalidZip);
+      return;
+    }
+
+    if (file.size <= 0 || file.size > MAX_ZIP_BYTES) {
+      setError(t.zipTooLarge);
+      return;
+    }
+
     setArchive(file);
     setInspection(null);
     setActivePath('');
     setSelectedPaths([]);
     setReport('');
     setMeta(null);
-    setError('');
     if (download?.url) URL.revokeObjectURL(download.url);
     setDownload(null);
     setBusy('inspect');
