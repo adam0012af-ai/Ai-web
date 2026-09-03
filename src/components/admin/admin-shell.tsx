@@ -56,11 +56,7 @@ export function AdminShell({
   const ar = locale === 'ar';
 
   return (
-    <div
-      className="flex min-h-screen"
-      dir={ar ? 'rtl' : 'ltr'}
-      lang={locale}
-    >
+    <div className="flex min-h-screen" dir={ar ? 'rtl' : 'ltr'} lang={locale}>
       <aside
         className={`surface sticky top-0 hidden h-screen w-72 shrink-0 overflow-y-auto rounded-none border-y-0 p-4 xl:block ${
           ar ? 'border-r-0' : 'border-l-0'
@@ -91,7 +87,7 @@ export function AdminShell({
       <div className="min-w-0 flex-1">
         <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--bg)]/90 px-3 backdrop-blur-xl sm:px-5">
           <div className="flex min-w-0 items-center gap-2">
-            <AdminMobileNav />
+            <AdminMobileNav locale={locale} />
             <div className="min-w-0">
               <b className="block truncate">
                 {ar ? 'إدارة Nexa AI' : 'Nexa AI Administration'}
@@ -110,9 +106,7 @@ export function AdminShell({
           </Link>
         </header>
 
-        <main className="p-4 sm:p-6 lg:p-8">
-          {children}
-        </main>
+        <main className="p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );
