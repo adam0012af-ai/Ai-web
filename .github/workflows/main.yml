@@ -1,18 +1,17 @@
-name: Unzip Project
+name: Apply ZIP Update (Desktop)
 
 on:
   workflow_dispatch:
-    inputs:
-      zip_file:
-        description: "ZIP file name in repository root"
-        required: true
-        default: "nexa-ai-mobile-ready.zip"
 
 permissions:
   contents: write
 
+concurrency:
+  group: nexa-zip-update-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  unzip:
+  apply-update:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,80 +20,137 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify ZIP file
+      - name: Find newest ZIP in repository root
         shell: bash
         run: |
-          set -e
-          ZIP="${{ inputs.zip_file }}"
+          set -euo pipefail
 
-          if [ ! -f "$ZIP" ]; then
-            echo "ZIP file not found: $ZIP"
-            echo "Repository root files:"
-            ls -la
+          mapfile -t ZIPS < <(git ls-files '*.zip' | awk 'index($0, "/") == 0')
+
+          if [ "${#ZIPS[@]}" -eq 0 ]; then
+            echo "No ZIP file was found in the repository root."
+            echo "Upload the Nexa update ZIP from Code > Add file > Upload files, then run this workflow again."
             exit 1
           fi
 
-      - name: Extract project safely
+          SELECTED=""
+          SELECTED_TS=0
+
+          for FILE in "${ZIPS[@]}"; do
+            TS=$(git log -1 --format=%ct -- "$FILE" 2>/dev/null || echo 0)
+            if [ "$TS" -ge "$SELECTED_TS" ]; then
+              SELECTED="$FILE"
+              SELECTED_TS="$TS"
+            fi
+          done
+
+          if [ -z "$SELECTED" ] || [ ! -f "$SELECTED" ]; then
+            echo "Unable to select a valid ZIP file."
+            exit 1
+          fi
+
+          echo "ZIP_FILE=$SELECTED" >> "$GITHUB_ENV"
+          echo "Selected update: $SELECTED"
+
+      - name: Validate ZIP safely
         shell: bash
         run: |
-          set -e
-          ZIP="${{ inputs.zip_file }}"
+          set -euo pipefail
+
+          ZIP="$ZIP_FILE"
+
+          if ! unzip -tq "$ZIP" >/dev/null; then
+            echo "The ZIP archive is damaged or invalid: $ZIP"
+            exit 1
+          fi
+
+          while IFS= read -r ENTRY; do
+            NORMALIZED="${ENTRY//\\//}"
+
+            if [[ "$NORMALIZED" == /* ]] || [[ "$NORMALIZED" =~ ^[A-Za-z]:/ ]] || [[ "$NORMALIZED" =~ (^|/)\.\.(/|$) ]]; then
+              echo "Unsafe archive path rejected: $ENTRY"
+              exit 1
+            fi
+
+            case "$NORMALIZED" in
+              .env|*/.env|.env.local|*/.env.local|.env.production|*/.env.production|.env.development|*/.env.development|.env.preview|*/.env.preview|.env.test|*/.env.test)
+                echo "Secret environment file rejected from ZIP: $ENTRY"
+                exit 1
+                ;;
+            esac
+          done < <(zipinfo -1 "$ZIP")
+
+          echo "ZIP validation passed."
+
+      - name: Extract update safely
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP="$ZIP_FILE"
 
           rm -rf .unpack
           mkdir -p .unpack
           unzip -q "$ZIP" -d .unpack
 
-          TOP_DIRS=$(find .unpack -mindepth 1 -maxdepth 1 -type d | wc -l)
-          TOP_FILES=$(find .unpack -mindepth 1 -maxdepth 1 -type f | wc -l)
+          TOP_DIRS=$(find .unpack -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+          TOP_FILES=$(find .unpack -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
 
-          # GitHub's default Actions token cannot push/create workflow files.
-          # Keep the workflow already in the repo and skip workflows from the ZIP.
+          # If a ZIP contains one wrapper folder and no root files, strip only that wrapper.
           if [ "$TOP_DIRS" -eq 1 ] && [ "$TOP_FILES" -eq 0 ]; then
             ROOT_DIR=$(find .unpack -mindepth 1 -maxdepth 1 -type d | head -n 1)
-            rsync -a \
-              --exclude='.git' \
-              --exclude='.github/workflows/' \
-              "$ROOT_DIR"/ ./
+            SOURCE="$ROOT_DIR/"
           else
-            rsync -a \
-              --exclude='.git' \
-              --exclude='.github/workflows/' \
-              .unpack/ ./
+            SOURCE=".unpack/"
           fi
+
+          rsync -a \
+            --exclude='.git/' \
+            --exclude='.github/workflows/' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --include='.env.example' \
+            "$SOURCE" ./
 
           rm -rf .unpack
           rm -f "$ZIP"
 
-      - name: Commit extracted files
+          if [ ! -f package.json ] || [ ! -d src ]; then
+            echo "Safety check failed: repository no longer looks like the Nexa Next.js project."
+            exit 1
+          fi
+
+          echo "Update extracted successfully."
+
+      - name: Show changes
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
+          git status --short
+
+      - name: Commit and push update
+        shell: bash
+        run: |
+          set -euo pipefail
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add -A
 
-          # Safety: never let this workflow modify files under .github/workflows.
+          # The update ZIP is never allowed to replace GitHub workflow files.
           git reset -- .github/workflows 2>/dev/null || true
 
           if git diff --cached --quiet; then
-            echo "No changes to commit."
+            echo "No project changes to commit."
             exit 0
           fi
 
-          git commit -m "Extract project files"
+          UPDATE_NAME="${ZIP_FILE%.zip}"
+          git commit -m "Apply Nexa update: ${UPDATE_NAME}"
 
-          # Small retry for transient network/server failures.
-          for attempt in 1 2 3; do
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
-              echo "Project files pushed successfully."
-              exit 0
-            fi
+          # If a harmless commit landed while this workflow was running, rebase before pushing.
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
-            echo "Push attempt $attempt failed. Retrying..."
-            sleep $((attempt * 3))
-          done
-
-          echo "Push failed after 3 attempts."
-          exit 1
+          echo "Nexa update applied successfully."
