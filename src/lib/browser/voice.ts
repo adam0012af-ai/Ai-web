@@ -1,9 +1,7 @@
 export type VoiceLocale = 'ar' | 'en';
 
 type RecognitionResultLike = {
-  0?: {
-    transcript?: string;
-  };
+  0?: { transcript?: string };
 };
 
 type RecognitionEventLike = {
@@ -25,8 +23,7 @@ export type SpeechRecognitionLike = {
   onerror: (() => void) | null;
 };
 
-type SpeechRecognitionConstructor =
-  new () => SpeechRecognitionLike;
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 type VoiceWindow = Window &
   typeof globalThis & {
@@ -41,11 +38,7 @@ function voiceWindow() {
 
 export function isVoiceInputSupported() {
   const target = voiceWindow();
-
-  return Boolean(
-    target?.SpeechRecognition ??
-      target?.webkitSpeechRecognition,
-  );
+  return Boolean(target?.SpeechRecognition ?? target?.webkitSpeechRecognition);
 }
 
 export function createVoiceRecognition(
@@ -57,28 +50,19 @@ export function createVoiceRecognition(
   },
 ) {
   const target = voiceWindow();
-
   const Constructor =
-    target?.SpeechRecognition ??
-    target?.webkitSpeechRecognition;
+    target?.SpeechRecognition ?? target?.webkitSpeechRecognition;
 
   if (!Constructor) return null;
 
   const recognition = new Constructor();
-
-  recognition.lang =
-    locale === 'ar' ? 'ar-EG' : 'en-US';
-
+  recognition.lang = locale === 'ar' ? 'ar-EG' : 'en-US';
   recognition.interimResults = false;
   recognition.continuous = false;
 
   recognition.onresult = (event) => {
-    const last =
-      event.results[event.results.length - 1];
-
-    const text =
-      last?.[0]?.transcript?.trim();
-
+    const last = event.results[event.results.length - 1];
+    const text = last?.[0]?.transcript?.trim();
     if (text) handlers.onText(text);
   };
 
@@ -90,7 +74,7 @@ export function createVoiceRecognition(
 
 export function plainSpeechText(markdown: string) {
   return markdown
-    .replace(/```[\s\S]*?```/g, ' code block ')
+    .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/!\[[^\]]*]\([^)]*\)/g, '')
     .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
@@ -103,6 +87,7 @@ export function speakText(
   text: string,
   locale: VoiceLocale,
   onEnd?: () => void,
+  rate = 1,
 ) {
   if (
     typeof window === 'undefined' ||
@@ -113,21 +98,15 @@ export function speakText(
 
   window.speechSynthesis.cancel();
 
-  const utterance =
-    new SpeechSynthesisUtterance(
-      plainSpeechText(text),
-    );
-
-  utterance.lang =
-    locale === 'ar' ? 'ar-EG' : 'en-US';
-
-  utterance.rate = 1;
+  const utterance = new SpeechSynthesisUtterance(plainSpeechText(text));
+  utterance.lang = locale === 'ar' ? 'ar-EG' : 'en-US';
+  utterance.rate = Math.min(1.5, Math.max(0.7, rate));
+  utterance.pitch = 1;
 
   utterance.onend = () => onEnd?.();
   utterance.onerror = () => onEnd?.();
 
   window.speechSynthesis.speak(utterance);
-
   return true;
 }
 

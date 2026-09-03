@@ -2,15 +2,22 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  Brain,
   Copy,
   Download,
   Edit3,
+  Mic,
+  MicOff,
   Pin,
   Plus,
   Send,
+  Sparkles,
   Square,
   Star,
   Trash2,
+  Volume2,
+  VolumeX,
+  WandSparkles,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -18,6 +25,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { AppLocale } from '@/lib/i18n';
 import { getDashboardText } from '@/lib/i18n';
+import { getProductMessages } from '@/lib/product-messages';
+import {
+  createVoiceRecognition,
+  isVoiceInputSupported,
+  speakText,
+  stopSpeaking,
+  type SpeechRecognitionLike,
+} from '@/lib/browser/voice';
 import { MarkdownMessage } from './markdown-message';
 
 type Conv = {
@@ -34,12 +49,29 @@ type Msg = {
   content: string;
 };
 
-export function ChatWorkspace({ locale }: { locale: AppLocale }) {
+type ProjectContext = {
+  id: string;
+  name: string;
+} | null;
+
+export function ChatWorkspace({
+  locale,
+  project,
+  initialConversationId,
+}: {
+  locale: AppLocale;
+  project: ProjectContext;
+  initialConversationId: string | null;
+}) {
   const t = getDashboardText(locale);
+  const p = getProductMessages(locale);
+  const v = p.chatPro;
   const ar = locale === 'ar';
 
   const [convs, setConvs] = useState<Conv[]>([]);
-  const [active, setActive] = useState<string | null>(null);
+  const [active, setActive] = useState<string | null>(
+    initialConversationId,
+  );
   const [messages, setMessages] = useState<Msg[]>([]);
   const [q, setQ] = useState('');
   const [input, setInput] = useState('');
@@ -47,9 +79,29 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
   const [streaming, setStreaming] = useState('');
   const [uiError, setUiError] = useState('');
   const [copiedId, setCopiedId] = useState('');
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [autoSendVoice, setAutoSendVoice] = useState(false);
+  const [speakingId, setSpeakingId] = useState('');
+  const [speechRate, setSpeechRate] = useState(1);
 
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
+  const recognition = useRef<SpeechRecognitionLike | null>(null);
+  const autoSendRef = useRef(false);
+
+  useEffect(() => {
+    autoSendRef.current = autoSendVoice;
+  }, [autoSendVoice]);
+
+  useEffect(() => {
+    setVoiceSupported(isVoiceInputSupported());
+
+    return () => {
+      recognition.current?.abort();
+      stopSpeaking();
+    };
+  }, []);
 
   async function csrf() {
     const response = await fetch('/api/csrf', { cache: 'no-store' });
@@ -65,9 +117,14 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
 
   async function loadConversations() {
     try {
-      const response = await fetch('/api/ai/conversations', {
-        cache: 'no-store',
-      });
+      const query = project
+        ? `?project=${encodeURIComponent(project.id)}`
+        : '';
+
+      const response = await fetch(
+        `/api/ai/conversations${query}`,
+        { cache: 'no-store' },
+      );
 
       if (!response.ok) {
         setUiError(t.loadConversationsError);
@@ -84,7 +141,10 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
       setActive((current) => {
         if (
           current &&
-          list.some((conversation: Conv) => conversation.id === current)
+          list.some(
+            (conversation: Conv) =>
+              conversation.id === current,
+          )
         ) {
           return current;
         }
@@ -109,7 +169,9 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
       }
 
       const data = await response.json();
-      const loaded = Array.isArray(data?.conversation?.messages)
+      const loaded = Array.isArray(
+        data?.conversation?.messages,
+      )
         ? data.conversation.messages
         : [];
 
@@ -122,7 +184,7 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
 
   useEffect(() => {
     void loadConversations();
-  }, []);
+  }, [project?.id]);
 
   useEffect(() => {
     if (!active) {
@@ -134,28 +196,37 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
   }, [active]);
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: 'smooth' });
+    bottom.current?.scrollIntoView({
+      behavior: 'smooth',
+    });
   }, [messages, streaming]);
 
   function newChat() {
     abort.current?.abort();
     abort.current = null;
+    recognition.current?.abort();
+    stopSpeaking();
     setBusy(false);
     setActive(null);
     setMessages([]);
     setStreaming('');
     setInput('');
     setUiError('');
+    setSpeakingId('');
+    setListening(false);
   }
 
-  async function send() {
-    const text = input.trim();
+  async function sendText(
+    rawText: string,
+    clearComposer = true,
+  ) {
+    const text = rawText.trim();
 
     if (!text || busy) return;
 
     setBusy(true);
     setUiError('');
-    setInput('');
+    if (clearComposer) setInput('');
     setStreaming('');
 
     const temp: Msg = {
@@ -179,6 +250,7 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
         },
         body: JSON.stringify({
           conversationId: active,
+          projectId: project?.id ?? null,
           message: text,
         }),
         signal: controller.signal,
@@ -189,16 +261,21 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
 
         try {
           const data = await response.json();
-
-          if (typeof data?.error === 'string' && data.error.trim()) {
-            message = data.error;
+          if (
+            typeof data?.error === 'string' &&
+            data.error.trim()
+          ) {
+            message = ar
+              ? t.genericAiError
+              : data.error;
           }
         } catch {}
 
         throw new Error(message);
       }
 
-      const conversationId = response.headers.get('x-conversation-id');
+      const conversationId =
+        response.headers.get('x-conversation-id');
 
       if (conversationId && !active) {
         setActive(conversationId);
@@ -216,16 +293,23 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
 
         if (done) break;
 
-        all += decoder.decode(value, { stream: true });
+        all += decoder.decode(value, {
+          stream: true,
+        });
+
         setStreaming(all);
       }
 
       all += decoder.decode();
 
-      if (!all.trim()) throw new Error(t.emptyAiError);
+      if (!all.trim()) {
+        throw new Error(t.emptyAiError);
+      }
 
       setMessages((current) => [
-        ...current.filter((message) => message.id !== temp.id),
+        ...current.filter(
+          (message) => message.id !== temp.id,
+        ),
         temp,
         {
           id: `assistant-${Date.now()}`,
@@ -238,16 +322,128 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
       await loadConversations();
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
-        const message =
+        setUiError(
           error instanceof Error && error.message
             ? error.message
-            : t.genericAiError;
-
-        setUiError(message);
+            : t.genericAiError,
+        );
       }
     } finally {
       setBusy(false);
       abort.current = null;
+    }
+  }
+
+  async function send() {
+    await sendText(input);
+  }
+
+  function smartAction(action: string) {
+    const commands: Record<string, string> = ar
+      ? {
+          shorten:
+            'اختصر ردك السابق مع الحفاظ على أهم المعلومات.',
+          expand:
+            'وسّع ردك السابق وأضف التفاصيل العملية المهمة بدون حشو.',
+          simplify:
+            'بسّط ردك السابق واشرح الفكرة بلغة أسهل.',
+          translate:
+            'ترجم ردك السابق إلى اللغة الأخرى مع الحفاظ على المعنى والتنسيق.',
+          steps:
+            'حوّل ردك السابق إلى خطوات تنفيذ واضحة ومرتبة.',
+          table:
+            'حوّل المعلومات المناسبة من ردك السابق إلى جدول منظم.',
+          continue:
+            'أكمل من حيث توقفت في الرد السابق بدون تكرار ما سبق.',
+          improve:
+            'راجع ردك السابق واكتب نسخة أقوى وأكثر دقة واحترافية.',
+        }
+      : {
+          shorten:
+            'Shorten your previous answer while preserving the most important information.',
+          expand:
+            'Expand your previous answer with useful practical detail and no filler.',
+          simplify:
+            'Simplify your previous answer and explain it in easier language.',
+          translate:
+            'Translate your previous answer into the other language while preserving meaning and formatting.',
+          steps:
+            'Turn your previous answer into clear ordered execution steps.',
+          table:
+            'Convert the suitable information from your previous answer into a structured table.',
+          continue:
+            'Continue from where your previous answer stopped without repeating it.',
+          improve:
+            'Review your previous answer and produce a stronger, more accurate version.',
+        };
+
+    void sendText(commands[action] ?? commands.improve);
+  }
+
+  function startVoice() {
+    if (!voiceSupported || busy) return;
+
+    if (listening) {
+      recognition.current?.stop();
+      return;
+    }
+
+    stopSpeaking();
+    setSpeakingId('');
+
+    let captured = '';
+
+    const instance = createVoiceRecognition(locale, {
+      onText: (text) => {
+        captured = text;
+        setInput((current) =>
+          current.trim()
+            ? `${current.trim()} ${text}`
+            : text,
+        );
+      },
+      onEnd: () => {
+        setListening(false);
+        recognition.current = null;
+
+        if (autoSendRef.current && captured.trim()) {
+          void sendText(captured.trim());
+        }
+      },
+      onError: () => {
+        setListening(false);
+        recognition.current = null;
+      },
+    });
+
+    if (!instance) {
+      setUiError(v.voiceUnsupported);
+      return;
+    }
+
+    recognition.current = instance;
+    setListening(true);
+    instance.start();
+  }
+
+  function toggleSpeak(message: Msg) {
+    if (speakingId === message.id) {
+      stopSpeaking();
+      setSpeakingId('');
+      return;
+    }
+
+    stopSpeaking();
+
+    const started = speakText(
+      message.content,
+      locale,
+      () => setSpeakingId(''),
+      speechRate,
+    );
+
+    if (started) {
+      setSpeakingId(message.id);
     }
   }
 
@@ -256,7 +452,12 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
     action: 'delete' | 'pin' | 'favorite' | 'rename',
     value?: string,
   ) {
-    if (action === 'delete' && !confirm(t.deleteConversation)) return;
+    if (
+      action === 'delete' &&
+      !confirm(t.deleteConversation)
+    ) {
+      return;
+    }
 
     try {
       setUiError('');
@@ -273,14 +474,13 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
           body:
             action === 'delete'
               ? undefined
-              : JSON.stringify({
-                  action,
-                  value,
-                }),
+              : JSON.stringify({ action, value }),
         },
       );
 
-      if (!response.ok) throw new Error(t.updateConversationError);
+      if (!response.ok) {
+        throw new Error(t.updateConversationError);
+      }
 
       if (action === 'delete' && active === id) {
         setActive(null);
@@ -307,6 +507,7 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
     const blob = new Blob([message.content], {
       type: 'text/markdown;charset=utf-8',
     });
+
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
 
@@ -318,12 +519,35 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
     URL.revokeObjectURL(url);
   }
 
+  const actions = [
+    ['shorten', v.shorten],
+    ['expand', v.expand],
+    ['simplify', v.simplify],
+    ['translate', v.translate],
+    ['steps', v.steps],
+    ['table', v.table],
+    ['continue', v.continue],
+    ['improve', v.improve],
+  ] as const;
+
   return (
     <div
       className="surface grid min-h-[calc(100dvh-155px)] overflow-hidden rounded-2xl lg:grid-cols-[280px_1fr]"
       dir={ar ? 'rtl' : 'ltr'}
     >
       <aside className="border-b border-[var(--line)] p-3 lg:border-b-0 lg:border-e">
+        {project ? (
+          <div className="mb-3 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand)]/10 p-3">
+            <div className="flex items-center gap-2 text-sm font-black">
+              <Brain size={16} className="text-[var(--brand)]" />
+              {project.name}
+            </div>
+            <div className="muted mt-1 text-xs">
+              {v.memoryActive}
+            </div>
+          </div>
+        ) : null}
+
         <Button className="w-full" onClick={newChat}>
           <Plus size={16} />
           {t.newChat}
@@ -357,7 +581,8 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
                   className="w-full truncate text-start text-sm font-semibold"
                 >
                   {conversation.pinned && '📌 '}
-                  {conversation.title || t.untitledConversation}
+                  {conversation.title ||
+                    t.untitledConversation}
                 </button>
 
                 <div className="mt-1 flex gap-3 py-1 lg:hidden lg:group-hover:flex">
@@ -370,7 +595,11 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
                       );
 
                       if (value) {
-                        void mutate(conversation.id, 'rename', value);
+                        void mutate(
+                          conversation.id,
+                          'rename',
+                          value,
+                        );
                       }
                     }}
                   >
@@ -379,21 +608,33 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
 
                   <button
                     aria-label="Pin"
-                    onClick={() => void mutate(conversation.id, 'pin')}
+                    onClick={() =>
+                      void mutate(conversation.id, 'pin')
+                    }
                   >
                     <Pin size={13} />
                   </button>
 
                   <button
                     aria-label="Favorite"
-                    onClick={() => void mutate(conversation.id, 'favorite')}
+                    onClick={() =>
+                      void mutate(
+                        conversation.id,
+                        'favorite',
+                      )
+                    }
                   >
                     <Star size={13} />
                   </button>
 
                   <button
                     aria-label="Delete"
-                    onClick={() => void mutate(conversation.id, 'delete')}
+                    onClick={() =>
+                      void mutate(
+                        conversation.id,
+                        'delete',
+                      )
+                    }
                   >
                     <Trash2 size={13} />
                   </button>
@@ -404,9 +645,45 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
       </aside>
 
       <section className="flex min-w-0 flex-col">
-        <div className="border-b border-[var(--line)] px-4 py-3 sm:px-5 sm:py-4">
-          <b>{t.aiAssistant}</b>
-          <span className="muted ms-2 text-xs">{t.providerRouting}</span>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-3 sm:px-5">
+          <div>
+            <b>{t.aiAssistant}</b>
+            <span className="muted ms-2 hidden text-xs sm:inline">
+              {project ? v.memoryActive : t.providerRouting}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="muted flex items-center gap-1 text-[11px]">
+              <Volume2 size={13} />
+              <select
+                value={speechRate}
+                onChange={(event) =>
+                  setSpeechRate(Number(event.target.value))
+                }
+                className="rounded-lg border border-[var(--line)] bg-[var(--card)] px-2 py-1"
+                aria-label={v.voiceSpeed}
+              >
+                <option value="0.8">0.8×</option>
+                <option value="1">1×</option>
+                <option value="1.2">1.2×</option>
+                <option value="1.4">1.4×</option>
+              </select>
+            </label>
+
+            {voiceSupported ? (
+              <label className="muted hidden items-center gap-1 text-[11px] sm:flex">
+                <input
+                  type="checkbox"
+                  checked={autoSendVoice}
+                  onChange={(event) =>
+                    setAutoSendVoice(event.target.checked)
+                  }
+                />
+                {v.autoSend}
+              </label>
+            ) : null}
+          </div>
         </div>
 
         {uiError ? (
@@ -419,20 +696,32 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
           <div className="mx-auto max-w-3xl space-y-6">
             {!messages.length && !streaming ? (
               <div className="py-12 text-center sm:py-20">
-                <h2 className="text-2xl font-black">{t.workingOn}</h2>
+                <Sparkles
+                  className="mx-auto text-[var(--brand)]"
+                  size={30}
+                />
+                <h2 className="mt-3 text-2xl font-black">
+                  {t.workingOn}
+                </h2>
 
-                <p className="muted mt-2">{t.startConversation}</p>
+                <p className="muted mt-2">
+                  {project
+                    ? p.projects.usingMemory
+                    : t.startConversation}
+                </p>
 
                 <div className="mt-6 flex flex-wrap justify-center gap-2">
-                  {[t.prompt1, t.prompt2, t.prompt3].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => setInput(suggestion)}
-                      className="rounded-full border border-[var(--line)] px-3 py-2 text-sm"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
+                  {[t.prompt1, t.prompt2, t.prompt3].map(
+                    (suggestion) => (
+                      <button
+                        key={suggestion}
+                        onClick={() => setInput(suggestion)}
+                        className="rounded-full border border-[var(--line)] px-3 py-2 text-sm"
+                      >
+                        {suggestion}
+                      </button>
+                    ),
+                  )}
                 </div>
               </div>
             ) : null}
@@ -450,12 +739,13 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
                 <article key={message.id} className="group">
                   <MarkdownMessage content={message.content} />
 
-                  <div className="mt-2 flex items-center gap-1">
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
                     <Button
                       variant="ghost"
                       className="h-8 px-2"
-                      onClick={() => void copyMessage(message)}
-                      aria-label="Copy"
+                      onClick={() =>
+                        void copyMessage(message)
+                      }
                     >
                       <Copy size={14} />
                       <span className="text-xs">
@@ -463,21 +753,63 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
                           ? ar
                             ? 'تم النسخ'
                             : 'Copied'
-                          : ar
-                            ? 'نسخ'
-                            : 'Copy'}
+                          : p.common.copy}
                       </span>
                     </Button>
 
                     <Button
                       variant="ghost"
                       className="h-8 px-2"
-                      onClick={() => downloadMessage(message)}
-                      aria-label="Download"
+                      onClick={() => toggleSpeak(message)}
+                    >
+                      {speakingId === message.id ? (
+                        <VolumeX size={14} />
+                      ) : (
+                        <Volume2 size={14} />
+                      )}
+                      <span className="hidden text-xs sm:inline">
+                        {speakingId === message.id
+                          ? v.stopReading
+                          : v.readAnswer}
+                      </span>
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      className="h-8 px-2"
+                      onClick={() =>
+                        downloadMessage(message)
+                      }
                     >
                       <Download size={14} />
                     </Button>
                   </div>
+
+                  {message.id ===
+                  [...messages]
+                    .reverse()
+                    .find((item) => item.role === 'ASSISTANT')
+                    ?.id ? (
+                    <div className="mt-3">
+                      <div className="muted mb-2 flex items-center gap-1 text-[11px] font-bold">
+                        <WandSparkles size={13} />
+                        {v.smartActions}
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {actions.map(([id, label]) => (
+                          <button
+                            key={id}
+                            disabled={busy}
+                            onClick={() => smartAction(id)}
+                            className="rounded-full border border-[var(--line)] px-2.5 py-1.5 text-xs transition hover:bg-[var(--brand)]/10 disabled:opacity-40"
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </article>
               ) : null,
             )}
@@ -494,48 +826,99 @@ export function ChatWorkspace({ locale }: { locale: AppLocale }) {
         </div>
 
         <div className="sticky bottom-0 border-t border-[var(--line)] bg-[var(--card)]/95 p-3 backdrop-blur-xl sm:p-4">
-          <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-[var(--line)] bg-[var(--bg)] p-2">
-            <Textarea
-              rows={1}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  void send();
-                }
-              }}
-              onInput={(event) => {
-                event.currentTarget.style.height = 'auto';
-                event.currentTarget.style.height = `${Math.min(
-                  event.currentTarget.scrollHeight,
-                  160,
-                )}px`;
-              }}
-              placeholder={t.messagePlaceholder}
-              disabled={busy}
-              className="min-h-11 max-h-40 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-            />
+          <div className="mx-auto max-w-3xl">
+            {listening ? (
+              <div className="mb-2 flex items-center justify-center gap-2 rounded-xl bg-red-500/10 px-3 py-2 text-sm text-red-500">
+                <span className="size-2 animate-pulse rounded-full bg-current" />
+                {v.listening}
+              </div>
+            ) : null}
 
-            {busy ? (
-              <Button
-                variant="secondary"
-                onClick={() => abort.current?.abort()}
-                className="size-10 shrink-0 rounded-xl p-0"
-                aria-label={t.stop}
-              >
-                <Square size={15} />
-              </Button>
-            ) : (
-              <Button
-                onClick={() => void send()}
-                disabled={!input.trim()}
-                className="size-10 shrink-0 rounded-xl p-0"
-                aria-label={t.send}
-              >
-                <Send size={16} />
-              </Button>
-            )}
+            <div className="flex items-end gap-2 rounded-2xl border border-[var(--line)] bg-[var(--bg)] p-2">
+              {voiceSupported ? (
+                <Button
+                  type="button"
+                  variant={listening ? 'secondary' : 'ghost'}
+                  onClick={startVoice}
+                  disabled={busy}
+                  className={`size-10 shrink-0 rounded-xl p-0 ${
+                    listening ? 'text-red-500' : ''
+                  }`}
+                  aria-label={
+                    listening ? v.stopVoice : v.startVoice
+                  }
+                >
+                  {listening ? (
+                    <MicOff size={18} />
+                  ) : (
+                    <Mic size={18} />
+                  )}
+                </Button>
+              ) : null}
+
+              <Textarea
+                rows={1}
+                value={input}
+                onChange={(event) =>
+                  setInput(event.target.value)
+                }
+                onKeyDown={(event) => {
+                  if (
+                    event.key === 'Enter' &&
+                    !event.shiftKey
+                  ) {
+                    event.preventDefault();
+                    void send();
+                  }
+                }}
+                onInput={(event) => {
+                  event.currentTarget.style.height = 'auto';
+                  event.currentTarget.style.height =
+                    `${Math.min(
+                      event.currentTarget.scrollHeight,
+                      160,
+                    )}px`;
+                }}
+                placeholder={
+                  listening ? v.listening : t.messagePlaceholder
+                }
+                disabled={busy}
+                className="min-h-11 max-h-40 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+              />
+
+              {busy ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => abort.current?.abort()}
+                  className="size-10 shrink-0 rounded-xl p-0"
+                  aria-label={t.stop}
+                >
+                  <Square size={15} />
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => void send()}
+                  disabled={!input.trim()}
+                  className="size-10 shrink-0 rounded-xl p-0"
+                  aria-label={t.send}
+                >
+                  <Send size={16} />
+                </Button>
+              )}
+            </div>
+
+            {voiceSupported ? (
+              <label className="muted mt-2 flex items-center gap-2 px-1 text-[11px] sm:hidden">
+                <input
+                  type="checkbox"
+                  checked={autoSendVoice}
+                  onChange={(event) =>
+                    setAutoSendVoice(event.target.checked)
+                  }
+                />
+                {v.autoSend}
+              </label>
+            ) : null}
           </div>
         </div>
       </section>
