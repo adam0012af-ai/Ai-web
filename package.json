@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "npm run db:push && npm run db:seed && next build",
+    "build": "npm run db:push && npm run db:seed && npm run security:baseline && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "security:baseline": "tsx scripts/security-baseline.ts",
     "postinstall": "prisma generate",
     "check:project": "node scripts/check-project.mjs",
     "check:i18n": "node scripts/check-i18n.mjs"

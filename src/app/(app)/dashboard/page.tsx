@@ -1,307 +1,283 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
+import {
+  ArrowUpRight,
+  Clapperboard,
+  FolderKanban,
+  MessageSquare,
+} from 'lucide-react';
 
-import { Card } from '@/components/ui/card';
-import { PageHeader } from '@/components/dashboard/page-header';
-import { StatCard } from '@/components/dashboard/stat-card';
-import { UsageChart } from '@/components/dashboard/usage-chart';
-import { aiTools, localizeTool } from '@/data/ai-tools';
+import { SmartStart } from '@/components/dashboard/smart-start';
 import { getCurrentUser } from '@/lib/auth/session';
+import { getUserAiAllowance } from '@/lib/ai/limits';
 import { db } from '@/lib/db';
-import { getDashboardText, normalizeLocale } from '@/lib/i18n';
+import { normalizeLocale } from '@/lib/i18n';
+import { getV6Messages } from '@/lib/v6-messages';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
   const user = (await getCurrentUser())!;
   const cookieStore = await cookies();
-  const locale = normalizeLocale(cookieStore.get('nexa_locale')?.value);
-  const t = getDashboardText(locale);
+  const locale = normalizeLocale(
+    cookieStore.get('nexa_locale')?.value,
+  );
+  const t = getV6Messages(locale).home;
   const ar = locale === 'ar';
 
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-
-  const weekStart = new Date(Date.now() - 6 * 86400000);
-  weekStart.setHours(0, 0, 0, 0);
-
-  const [
-    today,
-    conversations,
-    notifications,
-    subscription,
-    weekUsage,
-    activities,
-    saved,
-  ] = await Promise.all([
-    db.aIUsage.count({
-      where: {
-        userId: user.id,
-        createdAt: { gte: start },
-        status: 'SUCCESS',
-      },
-    }),
-    db.conversation.findMany({
-      where: { userId: user.id },
-      orderBy: { updatedAt: 'desc' },
-      take: 5,
-    }),
-    db.notification.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    }),
-    db.subscription.findFirst({
-      where: { userId: user.id, status: 'ACTIVE' },
-      include: { plan: true },
-      orderBy: { createdAt: 'desc' },
-    }),
-    db.aIUsage.findMany({
-      where: {
-        userId: user.id,
-        status: 'SUCCESS',
-        createdAt: { gte: weekStart },
-      },
-      select: { createdAt: true },
-    }),
-    db.activityLog.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    }),
-    db.favorite.count({
-      where: { userId: user.id },
-    }),
-  ]);
-
-  const limit =
-    (subscription?.plan.dailyRequests ?? 30) + user.aiDailyBonus;
-
-  const chart = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(weekStart.getTime() + index * 86400000);
-    const key = date.toISOString().slice(0, 10);
-
-    return {
-      label: date.toLocaleDateString(ar ? 'ar-EG' : 'en', {
-        weekday: 'short',
+  const [allowance, conversations, projects, mediaJobs] =
+    await Promise.all([
+      getUserAiAllowance(user.id),
+      db.conversation.findMany({
+        where: { userId: user.id },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          projectId: true,
+          updatedAt: true,
+        },
+        take: 5,
       }),
-      value: weekUsage.filter(
-        (item) =>
-          item.createdAt.toISOString().slice(0, 10) === key,
-      ).length,
-    };
-  });
+      db.project.findMany({
+        where: {
+          userId: user.id,
+          archived: false,
+        },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          updatedAt: true,
+        },
+        take: 4,
+      }),
+      db.mediaJob.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          kind: true,
+          status: true,
+          createdAt: true,
+        },
+        take: 4,
+      }),
+    ]);
 
-  const arrow = ar ? '←' : '→';
+  const firstName =
+    user.name.trim().split(/\s+/)[0] || user.name;
 
   return (
-    <>
-      <PageHeader
-        eyebrow={ar ? 'مساحة العمل' : 'WORKSPACE'}
-        title={`${t.overviewTitle}، ${user.name.split(' ')[0]}`}
-        description={t.overviewDescription}
-      />
+    <div
+      className="mx-auto max-w-6xl pb-8"
+      dir={ar ? 'rtl' : 'ltr'}
+    >
+      <section className="px-1 pb-8 pt-5 text-center sm:pt-10">
+        <div className="text-xs font-black tracking-[.22em] text-[var(--brand)]">
+          {t.eyebrow}
+        </div>
+        <div className="muted mt-4 text-sm">
+          {t.greeting}، {firstName}
+        </div>
+        <h1 className="mx-auto mt-2 max-w-4xl text-3xl font-black tracking-tight sm:text-5xl">
+          {t.title}
+        </h1>
+        <p className="muted mx-auto mt-4 max-w-2xl text-sm leading-7 sm:text-base">
+          {t.description}
+        </p>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label={t.aiUsageToday}
-          value={today}
-          detail={t.successfulRequests}
-        />
-        <StatCard
-          label={t.remainingRequests}
-          value={Math.max(0, limit - today)}
-          detail={`${t.dailyPlanLimit}: ${limit}`}
-        />
-        <StatCard
-          label={t.recentConversations}
-          value={conversations.length}
-          detail={t.latestThreads}
-        />
-        <StatCard
-          label={t.currentPlan}
-          value={subscription?.plan.name ?? 'Free'}
-          detail={t.manageLimits}
-        />
-      </div>
+        <div className="mt-8">
+          <SmartStart locale={locale} />
+        </div>
+      </section>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_.65fr]">
-        <div className="space-y-6">
-          <UsageChart data={chart} />
-
-          <Card className="p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-black">{t.popularTools}</h2>
-              <Link
-                className="shrink-0 text-sm font-bold text-[var(--brand)]"
-                href="/dashboard/ai"
-              >
-                {t.allTools}
-              </Link>
+      <section className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]">
+        <div className="rounded-3xl border border-[var(--line)] bg-[var(--card)] p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <MessageSquare
+                size={18}
+                className="text-[var(--brand)]"
+              />
+              <h2 className="font-black">
+                {t.continue}
+              </h2>
             </div>
+            <Link
+              href="/dashboard/ai/chat"
+              className="muted flex items-center gap-1 text-xs font-bold hover:text-[var(--brand)]"
+            >
+              {t.openAll}
+              <ArrowUpRight size={13} />
+            </Link>
+          </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {aiTools.slice(0, 6).map((tool) => {
-                const localized = localizeTool(tool, locale);
-
-                return (
-                  <Link
-                    key={tool.slug}
-                    href={
-                      tool.slug === 'chat'
-                        ? '/dashboard/ai/chat'
-                        : `/dashboard/ai/${tool.slug}`
-                    }
-                    className="rounded-2xl border border-[var(--line)] p-4 transition hover:bg-black/[.025] dark:hover:bg-white/[.04]"
-                  >
-                    <tool.icon size={18} />
-                    <div className="mt-3 text-sm font-black">
-                      {localized.displayTitle}
-                    </div>
-                    <div className="muted mt-1 text-xs">
-                      {localized.displayCategory}
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </Card>
-
-          <Card className="p-5 sm:p-6">
-            <h2 className="text-lg font-black">{t.recentConversations}</h2>
-
-            <div className="mt-3 divide-y divide-[var(--line)]">
-              {conversations.length ? (
-                conversations.map((conversation) => (
-                  <Link
-                    href="/dashboard/ai/chat"
-                    key={conversation.id}
-                    className="flex items-center justify-between gap-4 py-4 text-sm"
-                  >
-                    <b className="min-w-0 truncate">
-                      {conversation.title}
-                    </b>
-                    <span className="muted shrink-0">
-                      {conversation.updatedAt.toLocaleDateString(
-                        ar ? 'ar-EG' : 'en',
-                      )}
-                    </span>
-                  </Link>
-                ))
-              ) : (
-                <p className="muted py-5 text-sm">
-                  {t.noConversations}
-                </p>
-              )}
-            </div>
-          </Card>
-
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="p-5 sm:p-6">
-              <h2 className="text-lg font-black">{t.quickActions}</h2>
-
-              <div className="mt-4 grid gap-2">
+          <div className="mt-3 divide-y divide-[var(--line)]">
+            {conversations.length ? (
+              conversations.map((conversation) => (
                 <Link
-                  className="rounded-xl border border-[var(--line)] p-3 text-sm font-bold"
-                  href="/dashboard/ai/chat"
+                  key={conversation.id}
+                  href={
+                    conversation.projectId
+                      ? `/dashboard/ai/chat?project=${conversation.projectId}&conversation=${conversation.id}`
+                      : `/dashboard/ai/chat?conversation=${conversation.id}`
+                  }
+                  className="flex items-center justify-between gap-4 py-3 text-sm"
                 >
-                  {t.startChat} {arrow}
+                  <b className="min-w-0 truncate">
+                    {conversation.title}
+                  </b>
+                  <span className="muted shrink-0 text-xs">
+                    {conversation.updatedAt.toLocaleDateString(
+                      ar ? 'ar-EG' : 'en',
+                    )}
+                  </span>
                 </Link>
-                <Link
-                  className="rounded-xl border border-[var(--line)] p-3 text-sm font-bold"
-                  href="/dashboard/ai/writer"
-                >
-                  {t.openWriter} {arrow}
-                </Link>
-                <Link
-                  className="rounded-xl border border-[var(--line)] p-3 text-sm font-bold"
-                  href="/dashboard/support"
-                >
-                  {t.getSupport} {arrow}
-                </Link>
-              </div>
-            </Card>
-
-            <Card className="p-5 sm:p-6">
-              <h2 className="text-lg font-black">{t.recentActivity}</h2>
-
-              <div className="mt-3 space-y-3">
-                {activities.length ? (
-                  activities.map((activity) => (
-                    <div className="text-sm" key={activity.id}>
-                      <b>{activity.action}</b>
-                      <div className="muted text-xs">
-                        {activity.createdAt.toLocaleString(
-                          ar ? 'ar-EG' : 'en',
-                        )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="muted text-sm">{t.noActivity}</p>
-                )}
-              </div>
-            </Card>
+              ))
+            ) : (
+              <p className="muted py-6 text-sm">
+                {t.noConversations}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="space-y-6">
-          <Card className="p-5 sm:p-6">
-            <h2 className="text-lg font-black">{t.accountStatus}</h2>
-
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="muted">{t.email}</span>
-                <b>
-                  {user.emailVerifiedAt
-                    ? t.verified
-                    : t.pendingVerification}
-                </b>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="muted">{t.role}</span>
-                <b>{user.role}</b>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="muted">{t.savedContent}</span>
-                <b>{saved}</b>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="muted">{t.plan}</span>
-                <b>{subscription?.plan.name ?? 'Free'}</b>
-              </div>
+        <div className="rounded-3xl border border-[var(--line)] bg-[var(--card)] p-5 sm:p-6">
+          <div className="flex items-center gap-2">
+            <div className="brand-gradient grid size-9 place-items-center rounded-xl text-xs font-black text-white">
+              AI
             </div>
-          </Card>
-
-          <Card className="p-5 sm:p-6">
-            <h2 className="text-lg font-black">{t.notifications}</h2>
-
-            <div className="mt-3 space-y-4">
-              {notifications.length ? (
-                notifications.map((notification) => (
-                  <div key={notification.id}>
-                    <div className="text-sm font-bold">
-                      {notification.title}
-                    </div>
-                    <p className="muted mt-1 text-xs leading-5">
-                      {notification.body}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <p className="muted text-sm">{t.allCaughtUp}</p>
-              )}
+            <div>
+              <h2 className="font-black">
+                {t.usage}
+              </h2>
+              <p className="muted text-xs">
+                {allowance.remaining} {t.remaining}
+              </p>
             </div>
+          </div>
 
-            <Link
-              className="mt-5 inline-block text-sm font-bold text-[var(--brand)]"
-              href="/dashboard/notifications"
-            >
-              {t.viewAll}
-            </Link>
-          </Card>
+          <div className="mt-5 h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+            <div
+              className="brand-gradient h-full rounded-full"
+              style={{
+                width: `${Math.min(
+                  100,
+                  (allowance.used /
+                    Math.max(1, allowance.daily)) *
+                    100,
+                )}%`,
+              }}
+            />
+          </div>
+
+          <div className="muted mt-3 flex justify-between text-xs">
+            <span>{allowance.used}</span>
+            <span>{allowance.daily}</span>
+          </div>
         </div>
-      </div>
-    </>
+      </section>
+
+      <section className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-3xl border border-[var(--line)] bg-[var(--card)] p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <FolderKanban
+                size={18}
+                className="text-[var(--brand)]"
+              />
+              <h2 className="font-black">{t.projects}</h2>
+            </div>
+            <Link
+              href="/dashboard/projects"
+              className="muted flex items-center gap-1 text-xs font-bold hover:text-[var(--brand)]"
+            >
+              {t.openAll}
+              <ArrowUpRight size={13} />
+            </Link>
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {projects.length ? (
+              projects.map((project) => (
+                <Link
+                  key={project.id}
+                  href={`/dashboard/projects/${project.id}`}
+                  className="rounded-2xl bg-black/[.025] p-4 transition hover:bg-black/[.045] dark:bg-white/[.035] dark:hover:bg-white/[.06]"
+                >
+                  <b className="block truncate text-sm">
+                    {project.name}
+                  </b>
+                  <span className="muted mt-2 block text-xs">
+                    {project.updatedAt.toLocaleDateString(
+                      ar ? 'ar-EG' : 'en',
+                    )}
+                  </span>
+                </Link>
+              ))
+            ) : (
+              <p className="muted py-5 text-sm sm:col-span-2">
+                {t.noProjects}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-[var(--line)] bg-[var(--card)] p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Clapperboard
+                size={18}
+                className="text-[var(--brand)]"
+              />
+              <h2 className="font-black">
+                {t.recentMedia}
+              </h2>
+            </div>
+            <Link
+              href="/dashboard/studio/jobs"
+              className="muted flex items-center gap-1 text-xs font-bold hover:text-[var(--brand)]"
+            >
+              {t.openAll}
+              <ArrowUpRight size={13} />
+            </Link>
+          </div>
+
+          <div className="mt-3 divide-y divide-[var(--line)]">
+            {mediaJobs.length ? (
+              mediaJobs.map((job) => (
+                <Link
+                  href="/dashboard/studio/jobs"
+                  key={job.id}
+                  className="flex items-center justify-between gap-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <b className="block truncate text-sm">
+                      {job.title}
+                    </b>
+                    <span className="muted text-xs">
+                      {job.kind}
+                    </span>
+                  </div>
+                  <span className="muted shrink-0 text-[11px]">
+                    {job.status}
+                  </span>
+                </Link>
+              ))
+            ) : (
+              <p className="muted py-5 text-sm">
+                {t.noMedia}
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <p className="muted mx-auto mt-5 max-w-3xl text-center text-[11px] leading-5">
+        {t.studioNote}
+      </p>
+    </div>
   );
 }

@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  FileText,
-  LayoutDashboard,
+  Clapperboard,
+  FolderKanban,
+  Home,
   MessageSquare,
-  Sparkles,
   User,
 } from 'lucide-react';
 
@@ -24,13 +24,7 @@ export function MobileBottomNav({
     {
       href: '/dashboard',
       label: ar ? 'الرئيسية' : 'Home',
-      icon: LayoutDashboard,
-      exact: true,
-    },
-    {
-      href: '/dashboard/ai',
-      label: ar ? 'الأدوات' : 'Tools',
-      icon: Sparkles,
+      icon: Home,
       exact: true,
     },
     {
@@ -40,9 +34,15 @@ export function MobileBottomNav({
       exact: false,
     },
     {
-      href: '/dashboard/files',
-      label: ar ? 'الملفات' : 'Files',
-      icon: FileText,
+      href: '/dashboard/studio',
+      label: ar ? 'الاستوديو' : 'Studio',
+      icon: Clapperboard,
+      exact: false,
+    },
+    {
+      href: '/dashboard/projects',
+      label: ar ? 'المشاريع' : 'Projects',
+      icon: FolderKanban,
       exact: false,
     },
     {
@@ -56,7 +56,9 @@ export function MobileBottomNav({
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--line)] bg-[var(--card)]/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl lg:hidden"
-      aria-label={ar ? 'التنقل السريع' : 'Quick navigation'}
+      aria-label={
+        ar ? 'التنقل السريع' : 'Quick navigation'
+      }
     >
       <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
         {items.map((item) => {
@@ -77,7 +79,9 @@ export function MobileBottomNav({
               }`}
             >
               <Icon size={18} />
-              <span className="max-w-full truncate">{item.label}</span>
+              <span className="max-w-full truncate">
+                {item.label}
+              </span>
             </Link>
           );
         })}

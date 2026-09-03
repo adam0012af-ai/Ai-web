@@ -7,7 +7,6 @@ import {
   Files,
   FolderKanban,
   Heart,
-  History,
   LayoutDashboard,
   LifeBuoy,
   MessageSquare,
@@ -18,15 +17,17 @@ import {
 } from 'lucide-react';
 
 export const dashboardNav = [
-  ['Overview', '/dashboard', LayoutDashboard, 'نظرة عامة'],
+  ['Home', '/dashboard', LayoutDashboard, 'الرئيسية'],
+  ['AI Chat', '/dashboard/ai/chat', MessageSquare, 'المحادثة'],
   ['Projects', '/dashboard/projects', FolderKanban, 'المشاريع'],
-  ['AI Workspace', '/dashboard/ai', Sparkles, 'أدوات الذكاء الاصطناعي'],
-  ['AI Chat', '/dashboard/ai/chat', MessageSquare, 'محادثة الذكاء الاصطناعي'],
   ['Studio', '/dashboard/studio', Clapperboard, 'الاستوديو'],
-  ['Prompt Library', '/dashboard/prompts', BookMarked, 'مكتبة الأوامر'],
+  ['AI Tools', '/dashboard/ai', Sparkles, 'أدوات الذكاء الاصطناعي'],
   ['Files', '/dashboard/files', Files, 'الملفات'],
+  ['Prompt Library', '/dashboard/prompts', BookMarked, 'مكتبة الأوامر'],
   ['Favorites', '/dashboard/favorites', Heart, 'المفضلة'],
-  ['History', '/dashboard/history', History, 'السجل'],
+] as const;
+
+export const accountNav = [
   ['Notifications', '/dashboard/notifications', Bell, 'الإشعارات'],
   ['Billing', '/dashboard/billing', CreditCard, 'الفوترة'],
   ['Activity', '/dashboard/activity', Activity, 'النشاط'],
