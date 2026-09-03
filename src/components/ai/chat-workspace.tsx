@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Copy, Edit3, Pin, Plus, Send, Square, Star, Trash2 } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Copy, Edit3, Pin, Plus, Send, Square, Star, Trash2 } from 'lucide-react';
+import type { AppLocale } from '@/lib/i18n';
+import { getDashboardText } from '@/lib/i18n';
 
 type Conv = {
   id: string;
@@ -19,23 +22,10 @@ type Msg = {
   content: string;
 };
 
-async function csrf() {
-  const response = await fetch('/api/csrf', { cache: 'no-store' });
+export function ChatWorkspace({ locale }: { locale: AppLocale }) {
+  const t = getDashboardText(locale);
+  const ar = locale === 'ar';
 
-  if (!response.ok) {
-    throw new Error('Unable to start a secure request.');
-  }
-
-  const data = await response.json();
-
-  if (!data?.token) {
-    throw new Error('Security token is missing.');
-  }
-
-  return data.token as string;
-}
-
-export function ChatWorkspace() {
   const [convs, setConvs] = useState<Conv[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -48,6 +38,18 @@ export function ChatWorkspace() {
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
 
+  async function csrf() {
+    const response = await fetch('/api/csrf', { cache: 'no-store' });
+
+    if (!response.ok) throw new Error(t.secureRequestError);
+
+    const data = await response.json();
+
+    if (!data?.token) throw new Error(t.missingTokenError);
+
+    return data.token as string;
+  }
+
   async function loadConversations() {
     try {
       const response = await fetch('/api/ai/conversations', {
@@ -55,7 +57,7 @@ export function ChatWorkspace() {
       });
 
       if (!response.ok) {
-        setUiError('Unable to load conversations right now.');
+        setUiError(t.loadConversationsError);
         return;
       }
 
@@ -65,25 +67,29 @@ export function ChatWorkspace() {
       setConvs(list);
 
       setActive((current) => {
-        if (current && list.some((conversation: Conv) => conversation.id === current)) {
+        if (
+          current &&
+          list.some((conversation: Conv) => conversation.id === current)
+        ) {
           return current;
         }
 
         return list[0]?.id ?? null;
       });
     } catch {
-      setUiError('Unable to load conversations right now.');
+      setUiError(t.loadConversationsError);
     }
   }
 
   async function loadMessages(id: string) {
     try {
-      const response = await fetch(`/api/ai/conversations/${encodeURIComponent(id)}`, {
-        cache: 'no-store',
-      });
+      const response = await fetch(
+        `/api/ai/conversations/${encodeURIComponent(id)}`,
+        { cache: 'no-store' },
+      );
 
       if (!response.ok) {
-        setUiError('Unable to load this conversation.');
+        setUiError(t.loadConversationError);
         return;
       }
 
@@ -95,7 +101,7 @@ export function ChatWorkspace() {
       setMessages(loaded);
       setUiError('');
     } catch {
-      setUiError('Unable to load this conversation.');
+      setUiError(t.loadConversationError);
     }
   }
 
@@ -147,7 +153,6 @@ export function ChatWorkspace() {
 
     try {
       const token = await csrf();
-
       const controller = new AbortController();
       abort.current = controller;
 
@@ -165,10 +170,11 @@ export function ChatWorkspace() {
       });
 
       if (!response.ok) {
-        let message = 'Unable to complete that request right now.';
+        let message = t.genericAiError;
 
         try {
           const data = await response.json();
+
           if (typeof data?.error === 'string' && data.error.trim()) {
             message = data.error;
           }
@@ -185,9 +191,7 @@ export function ChatWorkspace() {
 
       const reader = response.body?.getReader();
 
-      if (!reader) {
-        throw new Error('The AI response stream could not be opened.');
-      }
+      if (!reader) throw new Error(t.genericAiError);
 
       const decoder = new TextDecoder();
       let all = '';
@@ -203,9 +207,7 @@ export function ChatWorkspace() {
 
       all += decoder.decode();
 
-      if (!all.trim()) {
-        throw new Error('The AI returned an empty response.');
-      }
+      if (!all.trim()) throw new Error(t.emptyAiError);
 
       setMessages((current) => [
         ...current.filter((message) => message.id !== temp.id),
@@ -224,15 +226,16 @@ export function ChatWorkspace() {
         const message =
           error instanceof Error && error.message
             ? error.message
-            : 'Unable to complete that request right now.';
+            : t.genericAiError;
 
         setUiError(message);
+
         setMessages((current) => [
           ...current,
           {
             id: `err-${Date.now()}`,
             role: 'ASSISTANT',
-            content: 'Unable to complete that request right now.',
+            content: t.genericAiError,
           },
         ]);
       }
@@ -247,32 +250,31 @@ export function ChatWorkspace() {
     action: 'delete' | 'pin' | 'favorite' | 'rename',
     value?: string,
   ) {
-    if (action === 'delete' && !confirm('Delete this conversation permanently?')) {
-      return;
-    }
+    if (action === 'delete' && !confirm(t.deleteConversation)) return;
 
     try {
       setUiError('');
       const token = await csrf();
 
-      const response = await fetch(`/api/ai/conversations/${encodeURIComponent(id)}`, {
-        method: action === 'delete' ? 'DELETE' : 'PATCH',
-        headers: {
-          'content-type': 'application/json',
-          'x-csrf-token': token,
+      const response = await fetch(
+        `/api/ai/conversations/${encodeURIComponent(id)}`,
+        {
+          method: action === 'delete' ? 'DELETE' : 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            'x-csrf-token': token,
+          },
+          body:
+            action === 'delete'
+              ? undefined
+              : JSON.stringify({
+                  action,
+                  value,
+                }),
         },
-        body:
-          action === 'delete'
-            ? undefined
-            : JSON.stringify({
-                action,
-                value,
-              }),
-      });
+      );
 
-      if (!response.ok) {
-        throw new Error('Unable to update the conversation.');
-      }
+      if (!response.ok) throw new Error(t.updateConversationError);
 
       if (action === 'delete' && active === id) {
         setActive(null);
@@ -282,29 +284,30 @@ export function ChatWorkspace() {
       await loadConversations();
     } catch (error) {
       setUiError(
-        error instanceof Error
-          ? error.message
-          : 'Unable to update the conversation.',
+        error instanceof Error ? error.message : t.updateConversationError,
       );
     }
   }
 
   return (
-    <div className="surface grid min-h-[calc(100vh-150px)] overflow-hidden rounded-2xl lg:grid-cols-[280px_1fr]">
-      <aside className="border-b border-[var(--line)] p-3 lg:border-b-0 lg:border-r">
+    <div
+      className="surface grid min-h-[calc(100dvh-155px)] overflow-hidden rounded-2xl lg:grid-cols-[280px_1fr]"
+      dir={ar ? 'rtl' : 'ltr'}
+    >
+      <aside className="border-b border-[var(--line)] p-3 lg:border-b-0 lg:border-e">
         <Button className="w-full" onClick={newChat}>
           <Plus size={16} />
-          New chat
+          {t.newChat}
         </Button>
 
         <Input
           className="mt-3 h-9"
-          placeholder="Search conversations"
+          placeholder={t.searchConversations}
           value={q}
           onChange={(event) => setQ(event.target.value)}
         />
 
-        <div className="mt-3 max-h-48 space-y-1 overflow-auto lg:max-h-[65vh]">
+        <div className="mt-3 max-h-40 space-y-1 overflow-auto sm:max-h-48 lg:max-h-[65vh]">
           {convs
             .filter((conversation) =>
               (conversation.title ?? '')
@@ -320,18 +323,18 @@ export function ChatWorkspace() {
               >
                 <button
                   onClick={() => setActive(conversation.id)}
-                  className="w-full truncate text-left text-sm font-semibold"
+                  className="w-full truncate text-start text-sm font-semibold"
                 >
                   {conversation.pinned && '📌 '}
-                  {conversation.title || 'Untitled conversation'}
+                  {conversation.title || t.untitledConversation}
                 </button>
 
                 <div className="mt-1 flex gap-3 py-1 lg:hidden lg:group-hover:flex">
                   <button
-                    aria-label="Rename"
+                    aria-label={t.renameConversation}
                     onClick={() => {
                       const value = prompt(
-                        'Conversation name',
+                        t.renameConversation,
                         conversation.title,
                       );
 
@@ -371,10 +374,8 @@ export function ChatWorkspace() {
 
       <section className="flex min-w-0 flex-col">
         <div className="border-b border-[var(--line)] px-4 py-3 sm:px-5 sm:py-4">
-          <b>AI Assistant</b>
-          <span className="muted ml-2 text-xs">
-            Automatic provider routing active
-          </span>
+          <b>{t.aiAssistant}</b>
+          <span className="muted ms-2 text-xs">{t.providerRouting}</span>
         </div>
 
         {uiError ? (
@@ -383,24 +384,16 @@ export function ChatWorkspace() {
           </div>
         ) : null}
 
-        <div className="flex-1 overflow-auto p-4 sm:p-6">
+        <div className="flex-1 overflow-auto p-3 sm:p-6">
           <div className="mx-auto max-w-3xl space-y-5">
             {!messages.length && !streaming ? (
-              <div className="py-16 text-center sm:py-20">
-                <h2 className="text-2xl font-black">
-                  What are you working on?
-                </h2>
+              <div className="py-12 text-center sm:py-20">
+                <h2 className="text-2xl font-black">{t.workingOn}</h2>
 
-                <p className="muted mt-2">
-                  Start a conversation or try one of these prompts.
-                </p>
+                <p className="muted mt-2">{t.startConversation}</p>
 
                 <div className="mt-6 flex flex-wrap justify-center gap-2">
-                  {[
-                    'Turn these notes into an action plan',
-                    'Explain this code simply',
-                    'Draft a launch announcement',
-                  ].map((suggestion) => (
+                  {[t.prompt1, t.prompt2, t.prompt3].map((suggestion) => (
                     <button
                       key={suggestion}
                       onClick={() => setInput(suggestion)}
@@ -418,8 +411,10 @@ export function ChatWorkspace() {
                 key={message.id}
                 className={
                   message.role === 'USER'
-                    ? 'ml-auto max-w-[85%] rounded-2xl bg-[var(--brand)] px-4 py-3 text-sm text-white'
-                    : 'group max-w-[92%] text-sm leading-7'
+                    ? `max-w-[88%] rounded-2xl bg-[var(--brand)] px-4 py-3 text-sm text-white ${
+                        ar ? 'me-auto' : 'ms-auto'
+                      }`
+                    : 'group max-w-[95%] text-sm leading-7'
                 }
               >
                 <div className="whitespace-pre-wrap">{message.content}</div>
@@ -430,6 +425,7 @@ export function ChatWorkspace() {
                     onClick={() =>
                       navigator.clipboard.writeText(message.content)
                     }
+                    aria-label="Copy"
                   >
                     <Copy size={14} />
                   </button>
@@ -438,7 +434,7 @@ export function ChatWorkspace() {
             ))}
 
             {streaming ? (
-              <div className="max-w-[92%] whitespace-pre-wrap text-sm leading-7">
+              <div className="max-w-[95%] whitespace-pre-wrap text-sm leading-7">
                 {streaming}
                 <span className="animate-pulse">▍</span>
               </div>
@@ -448,7 +444,7 @@ export function ChatWorkspace() {
           </div>
         </div>
 
-        <div className="border-t border-[var(--line)] p-3 sm:p-4">
+        <div className="sticky bottom-0 border-t border-[var(--line)] bg-[var(--card)] p-3 sm:p-4">
           <div className="mx-auto flex max-w-3xl gap-2">
             <Input
               value={input}
@@ -459,19 +455,27 @@ export function ChatWorkspace() {
                   void send();
                 }
               }}
-              placeholder="Message AI Assistant…"
+              placeholder={t.messagePlaceholder}
               disabled={busy}
             />
 
             {busy ? (
-              <Button variant="secondary" onClick={() => abort.current?.abort()}>
+              <Button
+                variant="secondary"
+                onClick={() => abort.current?.abort()}
+                className="shrink-0"
+              >
                 <Square size={15} />
-                Stop
+                <span className="hidden sm:inline">{t.stop}</span>
               </Button>
             ) : (
-              <Button onClick={() => void send()} disabled={!input.trim()}>
+              <Button
+                onClick={() => void send()}
+                disabled={!input.trim()}
+                className="shrink-0"
+              >
                 <Send size={16} />
-                <span className="hidden sm:inline">Send</span>
+                <span className="hidden sm:inline">{t.send}</span>
               </Button>
             )}
           </div>

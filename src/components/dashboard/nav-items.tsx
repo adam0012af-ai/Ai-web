@@ -1,1 +1,31 @@
-import { LayoutDashboard,Sparkles,User,Settings,Shield, Bell,CreditCard,Activity,LifeBuoy,Files,Heart,History,MessageSquare } from 'lucide-react';export const dashboardNav=[['Overview','/dashboard',LayoutDashboard],['AI Workspace','/dashboard/ai',Sparkles],['AI Chat','/dashboard/ai/chat',MessageSquare],['Files','/dashboard/files',Files],['Favorites','/dashboard/favorites',Heart],['History','/dashboard/history',History],['Notifications','/dashboard/notifications',Bell],['Billing','/dashboard/billing',CreditCard],['Activity','/dashboard/activity',Activity],['Support','/dashboard/support',LifeBuoy],['Profile','/dashboard/profile',User],['Security','/dashboard/security',Shield],['Settings','/dashboard/settings',Settings]] as const;
+import {
+  Activity,
+  Bell,
+  CreditCard,
+  Files,
+  Heart,
+  History,
+  LayoutDashboard,
+  LifeBuoy,
+  MessageSquare,
+  Settings,
+  Shield,
+  Sparkles,
+  User,
+} from 'lucide-react';
+
+export const dashboardNav = [
+  ['Overview', '/dashboard', LayoutDashboard, 'نظرة عامة'],
+  ['AI Workspace', '/dashboard/ai', Sparkles, 'مساحة AI'],
+  ['AI Chat', '/dashboard/ai/chat', MessageSquare, 'محادثة AI'],
+  ['Files', '/dashboard/files', Files, 'الملفات'],
+  ['Favorites', '/dashboard/favorites', Heart, 'المفضلة'],
+  ['History', '/dashboard/history', History, 'السجل'],
+  ['Notifications', '/dashboard/notifications', Bell, 'الإشعارات'],
+  ['Billing', '/dashboard/billing', CreditCard, 'الفوترة'],
+  ['Activity', '/dashboard/activity', Activity, 'النشاط'],
+  ['Support', '/dashboard/support', LifeBuoy, 'الدعم'],
+  ['Profile', '/dashboard/profile', User, 'الملف الشخصي'],
+  ['Security', '/dashboard/security', Shield, 'الأمان'],
+  ['Settings', '/dashboard/settings', Settings, 'الإعدادات'],
+] as const;

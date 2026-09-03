@@ -6,11 +6,15 @@ import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import type { AppLocale } from '@/lib/i18n';
+import { getDashboardText } from '@/lib/i18n';
 import { dashboardNav } from './nav-items';
 
-export function MobileNav() {
+export function MobileNav({ locale }: { locale: AppLocale }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const ar = locale === 'ar';
+  const t = getDashboardText(locale);
 
   useEffect(() => {
     setMounted(true);
@@ -41,21 +45,24 @@ export function MobileNav() {
       role="presentation"
     >
       <aside
-        className="fixed inset-y-0 left-0 z-[101] flex w-[86%] max-w-[340px] flex-col border-r border-[var(--line)] bg-[var(--card)] shadow-2xl"
+        className={`fixed inset-y-0 z-[101] flex w-[86%] max-w-[340px] flex-col bg-[var(--card)] shadow-2xl ${
+          ar ? 'right-0 border-l border-[var(--line)]' : 'left-0 border-r border-[var(--line)]'
+        }`}
         onClick={(event) => event.stopPropagation()}
-        aria-label="Mobile navigation"
+        aria-label={t.navigation}
+        dir={ar ? 'rtl' : 'ltr'}
       >
         <div className="flex min-h-17 shrink-0 items-center justify-between border-b border-[var(--line)] px-5">
           <div>
-            <div className="text-base font-extrabold">Navigation</div>
-            <div className="muted mt-0.5 text-xs">Nexa AI Workspace</div>
+            <div className="text-base font-extrabold">{t.navigation}</div>
+            <div className="muted mt-0.5 text-xs">{t.workspace}</div>
           </div>
 
           <Button
             variant="ghost"
             className="size-10 p-0"
             onClick={() => setOpen(false)}
-            aria-label="Close navigation"
+            aria-label={ar ? 'إغلاق القائمة' : 'Close navigation'}
           >
             <X size={20} />
           </Button>
@@ -63,7 +70,7 @@ export function MobileNav() {
 
         <nav className="flex-1 overflow-y-auto overscroll-contain px-3 py-4">
           <div className="space-y-1">
-            {dashboardNav.map(([label, href, Icon]) => (
+            {dashboardNav.map(([label, href, Icon, labelAr]) => (
               <Link
                 onClick={() => setOpen(false)}
                 key={href}
@@ -73,7 +80,7 @@ export function MobileNav() {
                 <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-black/[.04] dark:bg-white/[.05]">
                   <Icon size={18} />
                 </span>
-                <span>{label}</span>
+                <span>{ar ? labelAr : label}</span>
               </Link>
             ))}
           </div>
@@ -88,7 +95,7 @@ export function MobileNav() {
         variant="ghost"
         className="lg:hidden"
         onClick={() => setOpen(true)}
-        aria-label="Open navigation"
+        aria-label={ar ? 'فتح القائمة' : 'Open navigation'}
         aria-expanded={open}
       >
         <Menu size={20} />
