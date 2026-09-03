@@ -32,12 +32,16 @@ export async function GET(req: Request) {
     cookieStore.get('nexa_locale')?.value,
   );
   const labels = getProductMessages(locale).search;
+  const mediaJobLabel = locale === 'ar' ? 'مهمة إنتاج' : 'Media job';
+  const mediaAssetLabel = locale === 'ar' ? 'وسائط' : 'Media asset';
 
   const [
     projects,
     prompts,
     conversations,
     files,
+    mediaJobs,
+    mediaAssets,
     posts,
   ] = await Promise.all([
     db.project.findMany({
@@ -95,6 +99,38 @@ export async function GET(req: Request) {
       orderBy: { updatedAt: 'desc' },
     }),
     db.uploadedFile.findMany({
+      where: {
+        userId: user.id,
+        name: {
+          contains: q,
+          mode: 'insensitive',
+        },
+      },
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+    }),
+    db.mediaJob.findMany({
+      where: {
+        userId: user.id,
+        OR: [
+          {
+            title: {
+              contains: q,
+              mode: 'insensitive',
+            },
+          },
+          {
+            prompt: {
+              contains: q,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      },
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+    }),
+    db.mediaAsset.findMany({
       where: {
         userId: user.id,
         name: {
@@ -178,6 +214,16 @@ export async function GET(req: Request) {
           ? `/dashboard/ai/chat?project=${item.projectId}&conversation=${item.id}`
           : `/dashboard/ai/chat?conversation=${item.id}`,
       })),
+      ...mediaJobs.map((item) => ({
+        type: mediaJobLabel,
+        label: item.title,
+        href: '/dashboard/studio/jobs',
+      })),
+      ...mediaAssets.map((item) => ({
+        type: mediaAssetLabel,
+        label: item.name,
+        href: '/dashboard/studio/library',
+      })),
       ...files.map((item) => ({
         type: labels.file,
         label: item.name,
@@ -188,6 +234,6 @@ export async function GET(req: Request) {
         label: item.title,
         href: `/blog/${item.slug}`,
       })),
-    ].slice(0, 18),
+    ].slice(0, 20),
   });
 }

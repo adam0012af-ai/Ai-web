@@ -76,6 +76,23 @@ enum InvoiceStatus {
   UNCOLLECTIBLE
 }
 
+enum MediaKind {
+  IMAGE
+  VIDEO
+  AUDIO
+}
+
+enum MediaJobStatus {
+  DRAFT
+  WAITING_PROVIDER
+  QUEUED
+  PROCESSING
+  RENDERING
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
 model User {
   id                    String               @id @default(cuid())
   name                  String
@@ -105,6 +122,8 @@ model User {
   files                 UploadedFile[]
   projects              Project[]
   savedPrompts          SavedPrompt[]
+  mediaAssets           MediaAsset[]
+  mediaJobs             MediaJob[]
 }
 
 model Account {
@@ -209,19 +228,21 @@ model Invoice {
 }
 
 model Project {
-  id           String          @id @default(cuid())
-  userId       String
-  name         String
-  description  String?
-  instructions String?
-  language     String          @default("auto")
-  archived     Boolean         @default(false)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String          @id @default(cuid())
+  userId        String
+  name          String
+  description   String?
+  instructions  String?
+  language      String          @default("auto")
+  archived      Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversations Conversation[]
-  memories     ProjectMemory[]
-  files        UploadedFile[]
+  memories      ProjectMemory[]
+  files         UploadedFile[]
+  mediaAssets   MediaAsset[]
+  mediaJobs     MediaJob[]
 
   @@index([userId, archived, updatedAt])
 }
@@ -346,6 +367,64 @@ model AICache {
   createdAt DateTime @default(now())
 
   @@index([expiresAt])
+}
+
+model MediaJob {
+  id             String         @id @default(cuid())
+  userId         String
+  projectId      String?
+  kind           MediaKind
+  operation      String
+  title          String
+  prompt         String?
+  negativePrompt String?
+  status         MediaJobStatus @default(DRAFT)
+  progress       Int            @default(0)
+  provider       String?
+  model          String?
+  settings       Json           @default("{}")
+  result         Json           @default("{}")
+  error          String?
+  attempts       Int            @default(0)
+  favorite       Boolean        @default(false)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project        Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  assets         MediaAsset[]   @relation("MediaJobAssets")
+
+  @@index([userId, status, createdAt])
+  @@index([userId, kind, createdAt])
+  @@index([projectId, createdAt])
+}
+
+model MediaAsset {
+  id          String    @id @default(cuid())
+  userId      String
+  projectId   String?
+  sourceJobId String?
+  kind        MediaKind
+  name        String
+  mimeType    String?
+  storageKey  String?
+  previewUrl  String?
+  sizeBytes   Int?
+  width       Int?
+  height      Int?
+  durationMs  Int?
+  metadata    Json      @default("{}")
+  favorite    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  sourceJob   MediaJob? @relation("MediaJobAssets", fields: [sourceJobId], references: [id], onDelete: SetNull)
+
+  @@index([userId, kind, createdAt])
+  @@index([projectId, createdAt])
+  @@index([sourceJobId])
 }
 
 model Notification {
