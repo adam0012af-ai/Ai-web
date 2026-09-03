@@ -27,7 +27,7 @@ export function SmartStart({ locale }: { locale: AppLocale }) {
   const actions = [
     { href: '/dashboard/studio/image', label: t.image, hint: t.imageHint, icon: Images },
     { href: '/dashboard/studio/video', label: t.video, hint: t.videoHint, icon: Video },
-    { href: '/dashboard/ai/code', label: t.code, hint: t.codeHint, icon: Code2 },
+    { href: '/dashboard/code', label: t.code, hint: t.codeHint, icon: Code2 },
     { href: '/dashboard/ai/document', label: t.document, hint: t.documentHint, icon: FileSearch },
     { href: '/dashboard/projects', label: t.project, hint: t.projectHint, icon: FolderKanban },
     { href: '/dashboard/ai/chat', label: t.voice, hint: t.voiceHint, icon: Mic },
@@ -65,9 +65,7 @@ export function SmartStart({ locale }: { locale: AppLocale }) {
       const conversationId = response.headers.get('x-conversation-id');
       if (!conversationId) throw new Error('conversation');
 
-      router.push(
-        `/dashboard/ai/chat?conversation=${encodeURIComponent(conversationId)}`,
-      );
+      router.push(`/dashboard/ai/chat?conversation=${encodeURIComponent(conversationId)}`);
       router.refresh();
     } catch {
       setError(t.startError);
@@ -106,9 +104,7 @@ export function SmartStart({ locale }: { locale: AppLocale }) {
             </button>
           </div>
         </div>
-        {error ? (
-          <p className="mt-3 text-center text-sm text-red-500">{error}</p>
-        ) : null}
+        {error ? <p className="mt-3 text-center text-sm text-red-500">{error}</p> : null}
       </form>
 
       <div className="mx-auto mt-6 grid max-w-4xl gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -123,9 +119,7 @@ export function SmartStart({ locale }: { locale: AppLocale }) {
             </span>
             <span className="min-w-0">
               <b className="block text-sm">{action.label}</b>
-              <span className="muted mt-1 block text-xs leading-5">
-                {action.hint}
-              </span>
+              <span className="muted mt-1 block text-xs leading-5">{action.hint}</span>
             </span>
           </Link>
         ))}
