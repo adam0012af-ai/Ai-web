@@ -25,13 +25,31 @@ const schema = z.object({
   resolution: z.enum(['512', '1K', '2K', '4K']).default('1K'),
   quality: z.enum(['auto', 'low', 'medium', 'high']).default('auto'),
   mode: z.enum(['fast', 'balanced', 'quality']).default('balanced'),
-  outputFormat: z.enum(['png', 'jpeg', 'webp']).default('png'),
+  outputFormat: z.enum(['png', 'jpeg', 'webp']).default('webp'),
   reference: referenceSchema.optional(),
   confirmSpend: z.literal(true),
 });
 
 function safeCost(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function streamBuffer(buffer: Buffer) {
+  const chunkSize = 64 * 1024;
+  let offset = 0;
+
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= buffer.length) {
+        controller.close();
+        return;
+      }
+
+      const end = Math.min(buffer.length, offset + chunkSize);
+      controller.enqueue(new Uint8Array(buffer.subarray(offset, end)));
+      offset = end;
+    },
+  });
 }
 
 export async function POST(req: Request) {
@@ -115,6 +133,12 @@ export async function POST(req: Request) {
     });
     const latency = Date.now() - started;
     const cost = safeCost(result.cost);
+    const image = result.images[0];
+
+    if (!image) throw new Error('No image was returned by the provider.');
+
+    const bytes = Buffer.from(image.b64, 'base64');
+    if (!bytes.length) throw new Error('Generated image data is empty.');
 
     await Promise.all([
       db.mediaJob.update({
@@ -125,8 +149,9 @@ export async function POST(req: Request) {
           model: result.model,
           completedAt: new Date(),
           result: {
-            outputCount: result.images.length,
-            mediaTypes: result.images.map((image) => image.mediaType),
+            outputCount: 1,
+            mediaType: image.mediaType,
+            sizeBytes: bytes.length,
             cost,
             transientOutput: true,
           },
@@ -154,17 +179,26 @@ export async function POST(req: Request) {
             aspectRatio: parsed.data.aspectRatio,
             resolution: parsed.data.resolution,
             reference: Boolean(parsed.data.reference),
+            sizeBytes: bytes.length,
           },
         },
       }),
     ]);
 
-    return NextResponse.json({
-      jobId: job.id,
-      model: result.model,
-      cost,
-      images: result.images,
-      persistence: 'transient',
+    const extension = image.mediaType.includes('jpeg') ? 'jpg' : image.mediaType.includes('webp') ? 'webp' : 'png';
+    const safeName = parsed.data.title.replace(/[^a-zA-Z0-9\u0600-\u06FF._-]+/g, '-').slice(0, 80) || 'nexa-image';
+    const responseHeaders = new Headers({
+      'content-type': image.mediaType,
+      'content-disposition': `inline; filename="${safeName}.${extension}"`,
+      'cache-control': 'no-store',
+      'x-nexa-image-job': job.id,
+      'x-nexa-image-model': result.model,
+      'x-nexa-image-cost': cost === null ? '' : String(cost),
+    });
+
+    return new Response(streamBuffer(bytes), {
+      status: 200,
+      headers: responseHeaders,
     });
   } catch (error) {
     if (jobId) {
