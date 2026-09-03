@@ -4,9 +4,13 @@ import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { FavoriteToolButton } from '@/components/ai/favorite-tool-button';
+import { RecentTools } from '@/components/ai/recent-tools';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { Card } from '@/components/ui/card';
-import { aiTools, localizeTool } from '@/data/ai-tools';
+import {
+  aiTools,
+  localizeTool,
+} from '@/data/ai-tools';
 import { normalizeLocale } from '@/lib/i18n';
 
 export const dynamic = 'force-dynamic';
@@ -14,28 +18,41 @@ export const dynamic = 'force-dynamic';
 export default async function Page() {
   const user = (await getCurrentUser())!;
   const cookieStore = await cookies();
-  const locale = normalizeLocale(cookieStore.get('nexa_locale')?.value);
+
+  const locale = normalizeLocale(
+    cookieStore.get('nexa_locale')?.value,
+  );
+
   const ar = locale === 'ar';
 
-  const favorites = await db.favorite.findMany({
-    where: {
-      userId: user.id,
-      type: 'AI_TOOL',
-    },
-    select: {
-      referenceId: true,
-    },
-  });
+  const favorites =
+    await db.favorite.findMany({
+      where: {
+        userId: user.id,
+        type: 'AI_TOOL',
+      },
+      select: {
+        referenceId: true,
+      },
+    });
 
   const favoriteSet = new Set(
-    favorites.map((favorite) => favorite.referenceId),
+    favorites.map(
+      (favorite) => favorite.referenceId,
+    ),
   );
 
   return (
     <>
       <PageHeader
-        eyebrow={ar ? 'مساحة العمل' : 'WORKSPACE'}
-        title={ar ? 'أدوات الذكاء الاصطناعي' : 'AI Workspace'}
+        eyebrow={
+          ar ? 'مساحة العمل' : 'WORKSPACE'
+        }
+        title={
+          ar
+            ? 'أدوات الذكاء الاصطناعي'
+            : 'AI Workspace'
+        }
         description={
           ar
             ? '25 أداة متخصصة تعمل جميعها من خلال نفس طبقة الذكاء الاصطناعي المرنة والموثوقة.'
@@ -43,12 +60,18 @@ export default async function Page() {
         }
       />
 
+      <RecentTools locale={locale} />
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {aiTools.map((tool) => {
-          const localized = localizeTool(tool, locale);
+          const localized =
+            localizeTool(tool, locale);
 
           return (
-            <Card key={tool.slug} className="group p-5">
+            <Card
+              key={tool.slug}
+              className="group p-5"
+            >
               <div className="flex justify-between">
                 <span className="grid size-10 place-items-center rounded-xl bg-[var(--brand)]/10 text-[var(--brand)]">
                   <tool.icon size={19} />
@@ -56,8 +79,12 @@ export default async function Page() {
 
                 <FavoriteToolButton
                   slug={tool.slug}
-                  title={localized.displayTitle}
-                  initial={favoriteSet.has(tool.slug)}
+                  title={
+                    localized.displayTitle
+                  }
+                  initial={favoriteSet.has(
+                    tool.slug,
+                  )}
                 />
               </div>
 
@@ -70,12 +97,16 @@ export default async function Page() {
               </h2>
 
               <p className="muted mt-2 min-h-12 text-sm leading-6">
-                {localized.displayDescription}
+                {
+                  localized.displayDescription
+                }
               </p>
 
               <div className="muted mt-4 flex justify-between gap-3 text-xs">
                 <span>
-                  {ar ? 'يتم تتبع الاستخدام الأخير' : 'Recent usage tracked'}
+                  {ar
+                    ? 'يتم تتبع الاستخدام الأخير'
+                    : 'Recent usage tracked'}
                 </span>
 
                 <Link
@@ -86,7 +117,9 @@ export default async function Page() {
                       : `/dashboard/ai/${tool.slug}`
                   }
                 >
-                  {ar ? 'تشغيل ←' : 'Launch →'}
+                  {ar
+                    ? 'تشغيل ←'
+                    : 'Launch →'}
                 </Link>
               </div>
             </Card>
