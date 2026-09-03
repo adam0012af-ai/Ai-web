@@ -1,8 +1,10 @@
 import {
   Activity,
   Bell,
+  BookMarked,
   CreditCard,
   Files,
+  FolderKanban,
   Heart,
   History,
   LayoutDashboard,
@@ -16,8 +18,10 @@ import {
 
 export const dashboardNav = [
   ['Overview', '/dashboard', LayoutDashboard, 'نظرة عامة'],
-  ['AI Workspace', '/dashboard/ai', Sparkles, 'مساحة AI'],
-  ['AI Chat', '/dashboard/ai/chat', MessageSquare, 'محادثة AI'],
+  ['Projects', '/dashboard/projects', FolderKanban, 'المشاريع'],
+  ['AI Workspace', '/dashboard/ai', Sparkles, 'أدوات الذكاء الاصطناعي'],
+  ['AI Chat', '/dashboard/ai/chat', MessageSquare, 'محادثة الذكاء الاصطناعي'],
+  ['Prompt Library', '/dashboard/prompts', BookMarked, 'مكتبة الأوامر'],
   ['Files', '/dashboard/files', Files, 'الملفات'],
   ['Favorites', '/dashboard/favorites', Heart, 'المفضلة'],
   ['History', '/dashboard/history', History, 'السجل'],
