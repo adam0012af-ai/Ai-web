@@ -17,11 +17,7 @@ import {
 import type { AppLocale } from '@/lib/i18n';
 import { getV6Messages } from '@/lib/v6-messages';
 
-export function CreateMenu({
-  locale,
-}: {
-  locale: AppLocale;
-}) {
+export function CreateMenu({ locale }: { locale: AppLocale }) {
   const [open, setOpen] = useState(false);
   const t = getV6Messages(locale).create;
   const ar = locale === 'ar';
@@ -40,8 +36,8 @@ export function CreateMenu({
     { href: '/dashboard/projects', label: t.project, icon: FolderKanban },
     { href: '/dashboard/studio/image', label: t.image, icon: Images },
     { href: '/dashboard/studio/video', label: t.video, icon: Video },
+    { href: '/dashboard/code', label: t.code, icon: Code2 },
     { href: '/dashboard/ai/document', label: t.document, icon: FileSearch },
-    { href: '/dashboard/ai/code', label: t.code, icon: Code2 },
     { href: '/dashboard/prompts', label: t.prompt, icon: BookMarked },
     { href: '/dashboard/ai/chat', label: t.voice, icon: Mic },
   ];
@@ -67,13 +63,9 @@ export function CreateMenu({
             onClick={() => setOpen(false)}
           />
           <div
-            className={`surface absolute top-12 z-50 w-72 rounded-2xl p-2 shadow-2xl ${
-              ar ? 'left-0' : 'right-0'
-            }`}
+            className={`surface absolute top-12 z-50 w-72 rounded-2xl p-2 shadow-2xl ${ar ? 'left-0' : 'right-0'}`}
           >
-            <div className="muted px-3 pb-2 pt-1 text-xs font-black">
-              {t.title}
-            </div>
+            <div className="muted px-3 pb-2 pt-1 text-xs font-black">{t.title}</div>
             <div className="grid grid-cols-2 gap-1">
               {items.map((item) => (
                 <Link
