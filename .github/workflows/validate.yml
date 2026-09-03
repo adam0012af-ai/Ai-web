@@ -16,6 +16,11 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    env:
+      # Prisma 7 loads DATABASE_URL while generating the client. This is a
+      # non-routable validation-only value; the workflow never connects to it.
+      DATABASE_URL: postgresql://nexa:nexa@127.0.0.1:5432/nexa?schema=public
+      PRISMA_HIDE_UPDATE_MESSAGE: "1"
 
     steps:
       - name: Checkout repository
