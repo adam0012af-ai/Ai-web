@@ -1,0 +1,21 @@
+import { db } from '@/lib/db';
+
+export async function logActivity(
+  userId: string | undefined,
+  action: string,
+  entity?: string,
+  entityId?: string,
+  metadata: Record<string, unknown> = {},
+) {
+  await db.activityLog
+    .create({
+      data: {
+        userId,
+        action,
+        entity,
+        entityId,
+        metadata: metadata as never,
+      },
+    })
+    .catch(() => undefined);
+}
