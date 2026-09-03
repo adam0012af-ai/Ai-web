@@ -1,1 +1,25 @@
-import { db } from '@/lib/db';import { PageHeader } from '@/components/dashboard/page-header';import { ModelTable } from '@/components/admin/model-table';export const dynamic='force-dynamic';export default async function Page(){const rows=await db.aIModel.findMany({orderBy:[{provider:'asc'},{priority:'asc'}]});return <><PageHeader eyebrow="AI ADMIN" title="AI models" description="Enable models, choose defaults, assign feature-specific models, and change priority without editing application code."/><ModelTable rows={rows}/></>}
+import { cookies } from 'next/headers';
+
+import { ModelTable } from '@/components/admin/model-table';
+import { PageHeader } from '@/components/dashboard/page-header';
+import { getAdminMessages } from '@/lib/admin-messages';
+import { db } from '@/lib/db';
+import { normalizeLocale } from '@/lib/i18n';
+
+export const dynamic = 'force-dynamic';
+
+export default async function Page() {
+  const cookieStore = await cookies();
+  const locale = normalizeLocale(cookieStore.get('nexa_locale')?.value);
+  const t = getAdminMessages(locale).models;
+  const rows = await db.aIModel.findMany({
+    orderBy: [{ provider: 'asc' }, { priority: 'asc' }],
+  });
+
+  return (
+    <>
+      <PageHeader eyebrow={t.eyebrow} title={t.title} description={t.description} />
+      <ModelTable locale={locale} rows={rows} />
+    </>
+  );
+}
