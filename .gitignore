@@ -5,3 +5,6 @@ node_modules
 *.log
 coverage
 src/generated/prisma
+/dist/
+.vinext/
+.wrangler/
