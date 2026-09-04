@@ -63,7 +63,11 @@ jobs:
           set -e
 
           if [ "$STATUS" -ne 0 ]; then
-            echo "Temporary Cloudflare deployment failed. Output intentionally suppressed because temporary deployment metadata can be sensitive."
+            echo "Temporary Cloudflare deployment failed. Sanitized diagnostic lines:"
+            printf '%s\n' "$OUTPUT" \
+              | grep -Ei 'error|failed|unsupported|not supported|exceed|limit|credential|unauthenticated|forbidden|rate' \
+              | sed -E 's#https?://[^[:space:]]+#<url-redacted>#g; s#[A-Za-z0-9_-]{24,}#<redacted>#g' \
+              | tail -n 40 || true
             exit "$STATUS"
           fi
 
