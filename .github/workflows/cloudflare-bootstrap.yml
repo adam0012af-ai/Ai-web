@@ -1,0 +1,109 @@
+name: Cloudflare Bootstrap
+
+on:
+  push:
+    branches: [cloudflare/vinext-bootstrap]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nexa-cloudflare-bootstrap
+  cancel-in-progress: true
+
+jobs:
+  bootstrap:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      PRISMA_HIDE_UPDATE_MESSAGE: "1"
+      # Build-only placeholder. This workflow does not run migrations, seed data,
+      # or deployment against this value.
+      DATABASE_URL: postgresql://nexa:nexa@127.0.0.1:5432/nexa?schema=public
+
+    steps:
+      - name: Checkout Cloudflare bootstrap branch
+        uses: actions/checkout@v4
+        with:
+          ref: cloudflare/vinext-bootstrap
+          fetch-depth: 0
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install existing dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Initialize vinext for Cloudflare Workers
+        run: >-
+          npx --yes vinext@latest init
+          --skip-check
+          --platform=cloudflare
+          --cdn-cache=workers-cache
+          --data-cache=none
+          --image-optimization=none
+          --no-prerender
+          --no-experimental-warm-cdn-cache
+
+      - name: Normalize Worker name
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const file = 'wrangler.jsonc';
+          if (!fs.existsSync(file)) throw new Error('wrangler.jsonc was not generated');
+          const source = fs.readFileSync(file, 'utf8');
+          const updated = source.replace(/"name"\s*:\s*"[^"]+"/, '"name": "nexa-ai"');
+          fs.writeFileSync(file, updated);
+          NODE
+
+      - name: Build Cloudflare target
+        id: cloudflare_build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build:vinext 2>&1 | tee cloudflare-build.txt
+
+      - name: Upload Cloudflare build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-bootstrap-build-log
+          path: cloudflare-build.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Commit generated Cloudflare configuration
+        if: always()
+        shell: bash
+        run: |
+          rm -f cloudflare-build.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+          else
+            git commit -m "Bootstrap Nexa Cloudflare vinext target [skip ci]"
+            git push origin HEAD:cloudflare/vinext-bootstrap
+          fi
+
+      - name: Publish bootstrap summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Nexa Cloudflare bootstrap" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "vinext was initialized on an isolated branch; main was not changed." >> "$GITHUB_STEP_SUMMARY"
+          echo "Build outcome: ${{ steps.cloudflare_build.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if Cloudflare build failed
+        if: steps.cloudflare_build.outcome == 'failure'
+        run: exit 1
