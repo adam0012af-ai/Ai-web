@@ -1,0 +1,174 @@
+name: Cloudflare Preview
+
+on:
+  push:
+    branches: [cloudflare/vinext-bootstrap]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexa-cloudflare-preview
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: cloudflare-preview
+      url: https://nexa-ai-preview.adam0012af.workers.dev
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      PRISMA_HIDE_UPDATE_MESSAGE: "1"
+      PREVIEW_WORKER_NAME: nexa-ai-preview
+      PREVIEW_URL: https://nexa-ai-preview.adam0012af.workers.dev
+      # Build-only placeholder. Real runtime credentials are scoped to Wrangler steps.
+      DATABASE_URL: postgresql://nexa:nexa@127.0.0.1:5432/nexa?schema=public
+
+    steps:
+      - name: Guard the preview-only branch
+        run: |
+          test "$GITHUB_REF" = "refs/heads/cloudflare/vinext-bootstrap" || {
+            echo "Deployment is restricted to cloudflare/vinext-bootstrap."
+            exit 1
+          }
+
+      - name: Check deployment readiness without exposing values
+        id: readiness
+        env:
+          HAS_CF_DEPLOY_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+          HAS_DATABASE: ${{ secrets.DATABASE_URL != '' }}
+          HAS_SESSION_SECRET: ${{ secrets.SESSION_SECRET != '' }}
+          HAS_GEMINI: ${{ secrets.GEMINI_API_KEY != '' }}
+          HAS_OPENROUTER: ${{ secrets.OPENROUTER_API_KEY != '' }}
+          HAS_CF_AI: ${{ secrets.CLOUDFLARE_AI_API_TOKEN != '' }}
+        run: |
+          ready=false
+          ai_ready=false
+          if [ "$HAS_CF_DEPLOY_TOKEN" = true ] && [ "$HAS_CF_ACCOUNT" = true ] && [ "$HAS_DATABASE" = true ] && [ "$HAS_SESSION_SECRET" = true ]; then
+            ready=true
+          fi
+          if [ "$HAS_GEMINI" = true ] || [ "$HAS_OPENROUTER" = true ] || [ "$HAS_CF_AI" = true ]; then
+            ai_ready=true
+          fi
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          echo "ai_ready=$ai_ready" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Nexa Cloudflare preview"
+            echo "Infrastructure ready: $ready"
+            echo "AI provider ready: $ai_ready"
+            if [ "$ready" != true ]; then
+              echo "Preview deployment was skipped because required GitHub Actions credentials are unavailable."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout the triggering commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Generate the Prisma client explicitly
+        run: npm run prisma:generate
+
+      - name: Validate application
+        run: |
+          npm run typecheck
+          npm run check:i18n
+          npm run build:vinext
+          npx --no-install wrangler deploy --dry-run --config dist/server/wrangler.json
+
+      - name: Configure and assert isolated preview Worker
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const path = 'dist/server/wrangler.json';
+          const config = JSON.parse(fs.readFileSync(path, 'utf8'));
+          config.name = process.env.PREVIEW_WORKER_NAME;
+          config.workers_dev = true;
+          config.preview_urls = true;
+          delete config.route;
+          delete config.routes;
+          delete config.triggers;
+          config.vars = {
+            ...(config.vars || {}),
+            APP_URL: process.env.PREVIEW_URL,
+            OPENROUTER_APP_URL: process.env.PREVIEW_URL,
+            OPENROUTER_APP_NAME: 'Nexa AI',
+          };
+          if (config.name !== 'nexa-ai-preview' || config.route || config.routes || config.triggers) {
+            throw new Error('Preview isolation assertion failed');
+          }
+          fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
+          NODE
+
+      - name: Deploy preview code only
+        if: steps.readiness.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --no-install wrangler deploy --keep-vars --config dist/server/wrangler.json
+
+      - name: Apply preview runtime secrets without writing them to disk
+        if: steps.readiness.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RUNTIME_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RUNTIME_SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          RUNTIME_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          RUNTIME_OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RUNTIME_CLOUDFLARE_AI_API_TOKEN: ${{ secrets.CLOUDFLARE_AI_API_TOKEN }}
+        run: |
+          set -o pipefail
+          node --input-type=module <<'NODE' | npx --no-install wrangler secret bulk --config dist/server/wrangler.json
+          const values = {
+            DATABASE_URL: process.env.RUNTIME_DATABASE_URL,
+            SESSION_SECRET: process.env.RUNTIME_SESSION_SECRET,
+            CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
+          };
+          for (const [target, source] of [
+            ['GEMINI_API_KEY', 'RUNTIME_GEMINI_API_KEY'],
+            ['OPENROUTER_API_KEY', 'RUNTIME_OPENROUTER_API_KEY'],
+            ['CLOUDFLARE_AI_API_TOKEN', 'RUNTIME_CLOUDFLARE_AI_API_TOKEN'],
+          ]) {
+            if (process.env[source]) values[target] = process.env[source];
+          }
+          process.stdout.write(JSON.stringify(values));
+          NODE
+
+      - name: Smoke test public preview routes
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          for route in / /login /about /pricing; do
+            passed=false
+            for attempt in 1 2 3 4 5; do
+              if curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 25 "$PREVIEW_URL$route" -o /tmp/nexa-page.html && test -s /tmp/nexa-page.html; then
+                passed=true
+                break
+              fi
+              sleep 5
+            done
+            test "$passed" = true
+          done
+          body="$(curl --proto '=https' --tlsv1.2 --fail --silent --show-error --max-time 25 "$PREVIEW_URL/api/csrf")"
+          node -e 'const x=JSON.parse(process.argv[1]); if(!x.token || typeof x.token !== "string") process.exit(1)' "$body"
+          {
+            echo "Public route and CSRF smoke tests passed."
+            echo "Preview URL: $PREVIEW_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
