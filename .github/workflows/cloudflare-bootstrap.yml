@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: nexa-cloudflare-bootstrap
@@ -14,7 +14,6 @@ concurrency:
 
 jobs:
   bootstrap:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -30,15 +29,25 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: cloudflare/vinext-bootstrap
-          fetch-depth: 0
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Install Cloudflare target dependencies
-        run: npm install --no-audit --no-fund
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: TypeScript check
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: i18n audit
+        id: i18n
+        continue-on-error: true
+        run: npm run check:i18n
 
       - name: Build vinext Cloudflare target
         id: cloudflare_build
@@ -72,23 +81,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Commit generated package lock
-        if: steps.cloudflare_build.outcome == 'success'
-        shell: bash
-        run: |
-          rm -f cloudflare-build.txt cloudflare-dry-run.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -f package-lock.json ]; then
-            git add package-lock.json
-          fi
-          if git diff --cached --quiet; then
-            echo "No lockfile changes to commit."
-          else
-            git commit -m "Lock Cloudflare bootstrap dependencies [skip ci]"
-            git push origin HEAD:cloudflare/vinext-bootstrap
-          fi
-
       - name: Publish bootstrap summary
         if: always()
         shell: bash
@@ -96,9 +88,11 @@ jobs:
           echo "## Nexa Cloudflare bootstrap" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Main branch was not changed by this bootstrap run." >> "$GITHUB_STEP_SUMMARY"
+          echo "TypeScript: ${{ steps.typecheck.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "i18n: ${{ steps.i18n.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "vinext build: ${{ steps.cloudflare_build.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Worker dry-run: ${{ steps.worker_dry_run.outcome }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if Cloudflare validation failed
-        if: steps.cloudflare_build.outcome == 'failure' || steps.worker_dry_run.outcome == 'failure'
+        if: steps.typecheck.outcome == 'failure' || steps.i18n.outcome == 'failure' || steps.cloudflare_build.outcome == 'failure' || steps.worker_dry_run.outcome == 'failure'
         run: exit 1
