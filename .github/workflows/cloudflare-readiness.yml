@@ -15,12 +15,13 @@ concurrency:
 jobs:
   vinext-compatibility:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     env:
-      # Validation-only placeholder. The compatibility scan and Prisma client
-      # generation do not connect to this database.
+      # npm postinstall loads Prisma config. This placeholder is validation-only
+      # and is never contacted by the compatibility scan.
       DATABASE_URL: postgresql://nexa:nexa@127.0.0.1:5432/nexa?schema=public
       PRISMA_HIDE_UPDATE_MESSAGE: "1"
+      CI: "true"
 
     steps:
       - name: Checkout repository
@@ -34,8 +35,8 @@ jobs:
       - name: Install application dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Generate Prisma client
-        run: npm run prisma:generate
+      - name: Remove generated Prisma output before source scan
+        run: rm -rf src/generated/prisma
 
       - name: Run vinext compatibility scan
         id: vinext_check
@@ -43,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npx --yes vinext@latest check 2>&1 | tee vinext-check.txt
+          timeout 300s npx --yes vinext@latest check 2>&1 | tee vinext-check.txt
 
       - name: Upload compatibility report
         if: always()
@@ -62,7 +63,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ -f vinext-check.txt ]; then
             echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            tail -n 120 vinext-check.txt >> "$GITHUB_STEP_SUMMARY"
+            tail -n 160 vinext-check.txt >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Compatibility report was not produced." >> "$GITHUB_STEP_SUMMARY"
