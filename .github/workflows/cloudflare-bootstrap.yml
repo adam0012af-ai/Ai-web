@@ -21,8 +21,8 @@ jobs:
       CI: "true"
       NEXT_TELEMETRY_DISABLED: "1"
       PRISMA_HIDE_UPDATE_MESSAGE: "1"
-      # Build-only placeholder. This workflow does not run migrations, seed data,
-      # or deployment against this value.
+      # Build-only placeholder. No migrations, seed, security baseline, or
+      # production database writes are performed by this workflow.
       DATABASE_URL: postgresql://nexa:nexa@127.0.0.1:5432/nexa?schema=public
 
     steps:
@@ -37,61 +37,55 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install existing dependencies
+      - name: Install Cloudflare target dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Initialize vinext for Cloudflare Workers
-        run: >-
-          npx --yes vinext@latest init
-          --skip-check
-          --platform=cloudflare
-          --cdn-cache=workers-cache
-          --data-cache=none
-          --image-optimization=none
-          --no-prerender
-          --no-experimental-warm-cdn-cache
-
-      - name: Normalize Worker name
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const file = 'wrangler.jsonc';
-          if (!fs.existsSync(file)) throw new Error('wrangler.jsonc was not generated');
-          const source = fs.readFileSync(file, 'utf8');
-          const updated = source.replace(/"name"\s*:\s*"[^"]+"/, '"name": "nexa-ai"');
-          fs.writeFileSync(file, updated);
-          NODE
-
-      - name: Build Cloudflare target
+      - name: Build vinext Cloudflare target
         id: cloudflare_build
         continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
-          npm run build:vinext 2>&1 | tee cloudflare-build.txt
+          timeout 600s npm run build:vinext 2>&1 | tee cloudflare-build.txt
 
-      - name: Upload Cloudflare build log
+      - name: Validate generated Worker bundle
+        id: worker_dry_run
+        if: steps.cloudflare_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          if [ ! -f dist/server/wrangler.json ]; then
+            echo "Expected dist/server/wrangler.json was not generated." | tee cloudflare-dry-run.txt
+            exit 1
+          fi
+          npx wrangler deploy --dry-run --config dist/server/wrangler.json 2>&1 | tee cloudflare-dry-run.txt
+
+      - name: Upload Cloudflare build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cloudflare-bootstrap-build-log
-          path: cloudflare-build.txt
+          name: cloudflare-bootstrap-diagnostics
+          path: |
+            cloudflare-build.txt
+            cloudflare-dry-run.txt
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Commit generated Cloudflare configuration
-        if: always()
+      - name: Commit generated package lock
+        if: steps.cloudflare_build.outcome == 'success'
         shell: bash
         run: |
-          rm -f cloudflare-build.txt
+          rm -f cloudflare-build.txt cloudflare-dry-run.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          if [ -f package-lock.json ]; then
+            git add package-lock.json
+          fi
           if git diff --cached --quiet; then
-            echo "No generated changes to commit."
+            echo "No lockfile changes to commit."
           else
-            git commit -m "Bootstrap Nexa Cloudflare vinext target [skip ci]"
+            git commit -m "Lock Cloudflare bootstrap dependencies [skip ci]"
             git push origin HEAD:cloudflare/vinext-bootstrap
           fi
 
@@ -101,9 +95,10 @@ jobs:
         run: |
           echo "## Nexa Cloudflare bootstrap" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "vinext was initialized on an isolated branch; main was not changed." >> "$GITHUB_STEP_SUMMARY"
-          echo "Build outcome: ${{ steps.cloudflare_build.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Main branch was not changed by this bootstrap run." >> "$GITHUB_STEP_SUMMARY"
+          echo "vinext build: ${{ steps.cloudflare_build.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Worker dry-run: ${{ steps.worker_dry_run.outcome }}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Fail if Cloudflare build failed
-        if: steps.cloudflare_build.outcome == 'failure'
+      - name: Fail if Cloudflare validation failed
+        if: steps.cloudflare_build.outcome == 'failure' || steps.worker_dry_run.outcome == 'failure'
         run: exit 1
